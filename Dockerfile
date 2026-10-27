@@ -1,5 +1,5 @@
 # -- Stage 1: build ----------------------------------------------------------------------------
-FROM node:24-bookworm-slim AS build
+FROM node:26-bookworm-slim AS build
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci --ignore-scripts
@@ -17,7 +17,7 @@ RUN echo "${NOVNC_SHA256}  /tmp/novnc.tar.gz" | sha256sum -c - \
     && tar -xzf /tmp/novnc.tar.gz -C /novnc --strip-components=1
 
 # -- Stage 2: runtime --------------------------------------------------------------------------
-FROM node:24-bookworm-slim
+FROM node:26-bookworm-slim
 
 ENV NODE_ENV=production \
     PLAYWRIGHT_BROWSERS_PATH=/opt/browsers \
