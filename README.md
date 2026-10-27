@@ -1,5 +1,10 @@
 # Magasins U MCP server
 
+[![CI](https://github.com/Cohozen/magasins-u-mcp-server/actions/workflows/ci.yml/badge.svg)](https://github.com/Cohozen/magasins-u-mcp-server/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/Cohozen/magasins-u-mcp-server?sort=semver)](https://github.com/Cohozen/magasins-u-mcp-server/releases)
+[![Image](https://img.shields.io/badge/image-ghcr.io-blue?logo=docker&logoColor=white)](https://github.com/Cohozen/magasins-u-mcp-server/pkgs/container/magasins-u-mcp-server)
+[![License: MIT](https://img.shields.io/github/license/Cohozen/magasins-u-mcp-server)](LICENSE)
+
 An unofficial [MCP](https://modelcontextprotocol.io) server that gives an AI agent access to
 **your own** [Courses U](https://www.coursesu.com) account (Super U, Hyper U, U Express grocery
 drive in France): search and compare products today; cart, shopping lists, pickup slots, drive
@@ -13,6 +18,11 @@ own internet connection.
 > an account may breach the site's terms of use and lead to the account being restricted or
 > suspended. **Use it at your own risk**; the authors accept no liability (see the
 > [license](LICENSE)).
+>
+> Read the site's [legal notice](https://www.coursesu.com/mentions-legales) and its terms of sale
+> (*CGV*, shown once a store is selected) before use. The legal notice states that extracting its
+> database, even partially, may incur civil and criminal liability: this server is meant for the
+> personal use of your own account at a human pace, never for collecting catalogue data.
 
 ## Tools
 
@@ -47,16 +57,22 @@ deliberately has no proxy option.
 
 ## Installation (Docker)
 
-Requirements: Docker with Compose, an **x86_64** host for Google Chrome (on ARM, set
-`BROWSER_CHANNEL=chromium`), about 1 GB of free RAM.
+Requirements: Docker with Compose, about 1 GB of free RAM. The published image is **x86_64**
+(Google Chrome only ships for that platform); on ARM, build it yourself with
+`BROWSER_CHANNEL=chromium`.
 
 ```bash
-git clone <this repository> magasins-u-mcp && cd magasins-u-mcp
+git clone https://github.com/Cohozen/magasins-u-mcp-server.git && cd magasins-u-mcp-server
 cp .env.example .env
 # Set at least MCP_TOKEN (openssl rand -base64 32) and VNC_HOST (the host's local IP)
-docker compose up -d --build
+docker compose pull          # published image (x86_64)
+docker compose up -d         # or: docker compose up -d --build, to build it locally
 docker compose logs -f
 ```
+
+Releases follow [semantic versioning](https://semver.org); each one publishes
+`ghcr.io/cohozen/magasins-u-mcp-server:<version>` and `:latest`. To pin a version, set the `image`
+tag in `docker-compose.yml`.
 
 ### First login
 

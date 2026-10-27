@@ -35,9 +35,14 @@ The site is a real account behind Cloudflare. Use the `live-check` skill for any
   anything that changes the account.
 - Never solve or click a Cloudflare challenge, never spoof the browser fingerprint, never route
   through a VPN or proxy.
+- No feature that collects the catalogue in bulk: the site's legal notice targets database
+  extraction. Tools serve one user's requests on their own account.
 - On a challenge, a login wall or an HTTP 403/429, stop live checks and report.
 - Live captures (HAR, page dumps) stay in `.local/` or a scratch directory, never in the repo.
 
-## Commits
+## Commits and releases
 
 Conventional commits (`feat:`, `fix:`, `docs:`, `chore:`…), subject in the imperative, in English.
+They drive the version: release-please keeps a release PR open that bumps `package.json` and
+writes `CHANGELOG.md` (`feat` → minor, `fix` → patch while in `0.x`). Never edit the version or
+the changelog by hand; merging the release PR tags the release and publishes the image to GHCR.

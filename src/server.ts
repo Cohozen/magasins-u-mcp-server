@@ -6,6 +6,7 @@
  */
 
 import { timingSafeEqual } from "node:crypto";
+import { readFileSync } from "node:fs";
 import { createServer, type IncomingMessage } from "node:http";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
@@ -18,6 +19,20 @@ import { log } from "./log.ts";
 
 const config = loadConfig();
 const site = new Site(config);
+
+// One source of truth for the version: package.json, bumped by release-please.
+// `../package.json` resolves from both `src/` (development) and `dist/` (image).
+const { version } = JSON.parse(
+    readFileSync(new URL("../package.json", import.meta.url), "utf8"),
+) as { version: string };
+
+/** Sent to every client at connection time: how an agent should use this server. */
+const INSTRUCTIONS = `This server acts on the user's own Courses U account (Super U / Hyper U grocery drive in France) through a real browser session, at a human pace.
+- Product data (names, offers, aisles) is in French, as on the site. Search in French.
+- Call only what the user's request needs. One well-chosen search beats several; never collect the catalogue in bulk. Site requests are capped per day.
+- To find the cheapest product, compare unitPrice (or pricePerWash for laundry detergent), not price, and point out multi-buy offers.
+- Never change the account (cart, lists, slots, orders) unless the user asked for that exact change. An order always needs the user's explicit confirmation.
+- If a tool says a login or a Cloudflare check is needed, pass the link and the instructions on to the user, then stop: do not retry until they say it is done.`;
 
 const authorized = (request: IncomingMessage): boolean => {
     const expected = Buffer.from(`Bearer ${config.mcpToken}`);
@@ -42,7 +57,7 @@ const failure = (error: unknown): CallToolResult => {
 };
 
 const buildServer = (): McpServer => {
-    const server = new McpServer({ name: "magasins-u", version: "0.1.0" });
+    const server = new McpServer({ name: "magasins-u", version }, { instructions: INSTRUCTIONS });
 
     server.registerTool(
         "session_status",

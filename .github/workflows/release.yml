@@ -1,0 +1,42 @@
+name: Release
+
+# release-please keeps a release PR up to date from conventional commits. Merging it tags the
+# version, creates the GitHub release and publishes the image. Both happen in this one workflow:
+# a release created with GITHUB_TOKEN does not trigger other workflows.
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  release-please:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    outputs:
+      release_created: ${{ steps.release.outputs.release_created }}
+      version: ${{ steps.release.outputs.version }}
+    steps:
+      - id: release
+        uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
+
+  publish-image:
+    needs: release-please
+    if: needs.release-please.outputs.release_created == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    env:
+      IMAGE: ghcr.io/${{ github.repository }}
+      VERSION: ${{ needs.release-please.outputs.version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # ponytail: x86_64 only, the platform Google Chrome ships for; ARM users build locally.
+      - run: docker build -t "${IMAGE,,}:${VERSION}" -t "${IMAGE,,}:latest" .
+      - run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+      - run: docker push --all-tags "${IMAGE,,}"

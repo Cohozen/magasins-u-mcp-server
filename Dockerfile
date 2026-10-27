@@ -19,6 +19,11 @@ RUN echo "${NOVNC_SHA256}  /tmp/novnc.tar.gz" | sha256sum -c - \
 # -- Stage 2: runtime --------------------------------------------------------------------------
 FROM node:24-bookworm-slim
 
+# Links the published image to its repository on GitHub's container registry.
+LABEL org.opencontainers.image.source="https://github.com/Cohozen/magasins-u-mcp-server" \
+      org.opencontainers.image.description="Unofficial MCP server for Courses U, driven through a real browser session" \
+      org.opencontainers.image.licenses="MIT"
+
 ENV NODE_ENV=production \
     PLAYWRIGHT_BROWSERS_PATH=/opt/browsers \
     DISPLAY=:99 \
