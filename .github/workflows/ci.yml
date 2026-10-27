@@ -1,0 +1,45 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: npm run check
+      - run: npm test
+      - run: npm run build
+
+  # Builds the x86_64 image (with Google Chrome) and checks what it ships.
+  # The container is never started: it would contact the live site from a datacenter IP.
+  docker-image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - run: docker build -t magasins-u-mcp:ci .
+      - name: Inspect the image
+        run: |
+          docker run --rm --entrypoint sh magasins-u-mcp:ci -c '
+            set -e
+            google-chrome --version
+            node --version
+            test -f /usr/share/novnc/vnc.html
+            for tool in Xvfb x11vnc websockify tini; do command -v "$tool"; done
+            test "$(id -un)" = app
+          '
