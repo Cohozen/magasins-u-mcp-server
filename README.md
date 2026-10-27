@@ -1,0 +1,127 @@
+# Magasins U MCP server
+
+An unofficial [MCP](https://modelcontextprotocol.io) server that gives an AI agent access to
+**your own** [Courses U](https://www.coursesu.com) account (Super U, Hyper U, U Express grocery
+drive in France): search and compare products today; cart, shopping lists, pickup slots, drive
+orders, receipts and promotions in later versions (see [the design](docs/design.md)).
+
+It drives a real browser, with a session that **you** open by hand, and runs in Docker on your
+own internet connection.
+
+> [!WARNING]
+> **Unofficial project, not affiliated with Système U or Coopérative U in any way.** Automating
+> an account may breach the site's terms of use and lead to the account being restricted or
+> suspended. **Use it at your own risk**; the authors accept no liability (see the
+> [license](LICENSE)).
+
+## Tools
+
+| Tool | What it does |
+|---|---|
+| `session_status` | Signed in or not, selected store, requests made today; the link to open when a human action is needed. |
+| `search_products` | Searches the selected store: price, price per kilo or litre, promotion, pack size, price per wash for laundry detergent. |
+
+Product data is returned in French, as shown on the site.
+
+## How it works
+
+- **A real browser** (Google Chrome or Chromium, through
+  [Patchright](https://github.com/Kaliiiiiiiiii-Vinyzu/patchright)), shown on a virtual screen
+  inside the container. The site sits behind Cloudflare: a plain HTTP client is refused.
+- **You sign in yourself**, through noVNC in your own browser. The server never knows your
+  password and never solves a Cloudflare check for you.
+- **Human pace**: one site call at a time, 3 to 8 seconds between two requests, 300 requests a
+  day at most.
+- **Session upkeep**: the site drops the session after less than an hour of inactivity, so the
+  server reloads a page every 20 to 30 minutes (40 to 55 at night), at irregular intervals. Each
+  visit is logged in `/data/visits.jsonl`.
+- **Stop rather than insist**: expired session or Cloudflare check → the server stops, opens
+  noVNC and the tool returns the link to open. The site refuses access (HTTP 403/429) → 24-hour
+  pause.
+
+### Your own IP address, not a VPN
+
+Cloudflare scores the reputation of the IP address: behind a VPN or a proxy, checks pile up. Run
+the server from home and **make sure the Docker host does not go out through a VPN**. The server
+deliberately has no proxy option.
+
+## Installation (Docker)
+
+Requirements: Docker with Compose, an **x86_64** host for Google Chrome (on ARM, set
+`BROWSER_CHANNEL=chromium`), about 1 GB of free RAM.
+
+```bash
+git clone <this repository> magasins-u-mcp && cd magasins-u-mcp
+cp .env.example .env
+# Set at least MCP_TOKEN (openssl rand -base64 32) and VNC_HOST (the host's local IP)
+docker compose up -d --build
+docker compose logs -f
+```
+
+### First login
+
+On first start there is no session: the log shows a `noVNC access opened` line with a link like
+`http://<VNC_HOST>:6080/vnc.html?autoconnect=1&...`. The `session_status` tool returns the same
+link.
+
+1. Open that link from a device on the local network.
+2. In the browser shown, click **Se connecter** and sign in as usual, passing the Cloudflare check
+   yourself.
+3. That's it: the server notices the login within seconds, closes noVNC and saves the session.
+
+The same steps apply when the session expires or Cloudflare asks for a check. An unused noVNC link
+closes after 30 minutes; the next call opens a new one.
+
+### Connecting the agent
+
+- URL: `http(s)://<host>:8000/mcp` (*Streamable HTTP* transport)
+- Header: `Authorization: Bearer <MCP_TOKEN>`
+
+When exposed to the internet (through a tunnel or a reverse proxy), expose port 8000 only. **Port
+6080 (noVNC) stays on the local network.**
+
+## Configuration
+
+Every variable is described in [.env.example](.env.example). The main ones:
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `MCP_TOKEN` | — | Token required in `Authorization: Bearer` (mandatory, 24 characters at least) |
+| `VNC_HOST` | `<docker-host-ip>` | Local address used in the noVNC link |
+| `STORE_ID` | — | Expected store; `session_status` warns on a mismatch |
+| `BROWSER_CHANNEL` | `chrome` (Compose) | `chrome` or `chromium` |
+| `DELAY_MS` | `3000-8000` | Random pause between two site requests |
+| `DAILY_REQUEST_CAP` | `300` | Daily cap on site requests |
+| `KEEPALIVE_DAY_MIN` / `KEEPALIVE_NIGHT_MIN` | `20-30` / `40-55` | Keep-alive interval, in minutes |
+
+## Data and security
+
+The `/data` volume holds the browser profile, `session.json` (session cookies, mode `0600`) and
+`visits.jsonl`. **These files grant access to your account**: do not copy them anywhere else. The
+server stores no password, no payment data and no receipts.
+
+## Development
+
+```bash
+npm install
+npx patchright install chromium
+MCP_TOKEN=a-long-enough-development-token npm run dev
+```
+
+On macOS there is no noVNC: the browser window opens directly and you sign in there.
+`scripts/call.ts` calls a tool by hand.
+
+| Command | Effect |
+|---|---|
+| `npm run check` | Biome, then TypeScript |
+| `npm test` | Unit tests (Vitest), no access to the site |
+| `npm run build` | Compiles to `dist/` |
+
+## Acknowledgements
+
+The approach (real browser, session opened by hand, Docker) comes from
+[linkedin-mcp-server](https://github.com/stickerdaniel/linkedin-mcp-server).
+
+## License
+
+[MIT](LICENSE).

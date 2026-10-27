@@ -1,0 +1,23 @@
+services:
+  magasins-u-mcp:
+    build: .
+    image: magasins-u-mcp:local
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      BROWSER_CHANNEL: ${BROWSER_CHANNEL:-chrome}
+    ports:
+      # MCP endpoint. MCP_TOKEN is required on every request.
+      - "8000:8000"
+      # noVNC: local network only, never forward it from the internet.
+      # Only listens while a login or a Cloudflare check is pending.
+      - "6080:6080"
+    volumes:
+      - magasins-u-data:/data
+    # Chromium needs more shared memory than Docker's default 64 MB.
+    shm_size: 1gb
+    mem_limit: 1536m
+    stop_grace_period: 30s
+
+volumes:
+  magasins-u-data:
