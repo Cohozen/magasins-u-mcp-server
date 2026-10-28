@@ -1,6 +1,6 @@
 {
     "name": "magasins-u-mcp-server",
-    "version": "0.1.0",
+    "version": "0.2.0",
     "description": "Unofficial MCP server for coursesu.com / magasins-u.com, driven through a real browser session.",
     "license": "MIT",
     "private": true,
