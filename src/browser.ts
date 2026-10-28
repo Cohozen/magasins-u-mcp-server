@@ -14,7 +14,8 @@
  */
 
 import { randomInt } from "node:crypto";
-import { appendFile, mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { appendFile, mkdir, readFile, readlink, rename, rm, writeFile } from "node:fs/promises";
+import { hostname } from "node:os";
 import { join } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import { type BrowserContext, type Cookie, chromium, type Page, type Response } from "patchright";
@@ -62,6 +63,40 @@ export const isSessionCookie = (cookie: Pick<Cookie, "name" | "domain" | "expire
     SITE_DOMAIN.test(cookie.domain.replace(/^\./, "")) &&
     !CLOUDFLARE_COOKIE.test(cookie.name);
 
+/**
+ * Chrome locks its profile with a `SingletonLock` symlink to "hostname-pid". A container that is
+ * recreated (an image update) gets a new hostname, so Chrome takes the old lock for another
+ * machine's and refuses the profile. The lock is stale when it names another host or a dead
+ * process: this server is the profile's only user.
+ */
+export const isStaleLock = (
+    target: string,
+    hostname: string,
+    isAlive: (pid: number) => boolean,
+): boolean => {
+    const dash = target.lastIndexOf("-");
+    const pid = Number(target.slice(dash + 1));
+    return target.slice(0, dash) !== hostname || !Number.isInteger(pid) || !isAlive(pid);
+};
+
+const isAlive = (pid: number): boolean => {
+    try {
+        process.kill(pid, 0);
+        return true;
+    } catch (error) {
+        return (error as NodeJS.ErrnoException).code === "EPERM";
+    }
+};
+
+const clearStaleLock = async (profile: string): Promise<void> => {
+    const target = await readlink(join(profile, "SingletonLock")).catch(() => null);
+    if (target === null || !isStaleLock(target, hostname(), isAlive)) return;
+    for (const name of ["SingletonLock", "SingletonSocket", "SingletonCookie"]) {
+        await rm(join(profile, name), { force: true });
+    }
+    log.warn("stale browser profile lock removed");
+};
+
 // --- Browser ----------------------------------------------------------------------------------
 
 type SavedSession = { loginAt: string | null; cookies: Cookie[] };
@@ -96,15 +131,14 @@ export class Site {
 
     async start(): Promise<void> {
         await mkdir(this.config.dataDir, { recursive: true });
-        this.context = await chromium.launchPersistentContext(
-            join(this.config.dataDir, "profile"),
-            {
-                channel: this.config.browserChannel,
-                headless: false,
-                viewport: null,
-                args: ["--window-position=0,0", `--window-size=${WINDOW.width},${WINDOW.height}`],
-            },
-        );
+        const profile = join(this.config.dataDir, "profile");
+        await clearStaleLock(profile);
+        this.context = await chromium.launchPersistentContext(profile, {
+            channel: this.config.browserChannel,
+            headless: false,
+            viewport: null,
+            args: ["--window-position=0,0", `--window-size=${WINDOW.width},${WINDOW.height}`],
+        });
         const saved = await this.readSession();
         this.loginAt = saved.loginAt;
         if (saved.cookies.length > 0) await this.context.addCookies(saved.cookies);
