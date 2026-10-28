@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseCart, parseCartLine } from "./cart.ts";
+import { type Cart, cartChanges, cartDiff, parseCart, parseCartLine } from "./cart.ts";
 
 // Texts shaped like the real cart page, with invented amounts.
 const line = (fields: Record<string, unknown>, text: string, quantity: string) => ({
@@ -65,5 +65,98 @@ describe("parseCart", () => {
             estimatedTotal: null,
             lines: [],
         });
+    });
+});
+
+const cartOf = (lines: [pid: string, quantity: number][]) =>
+    ({
+        itemCount: null,
+        estimatedTotal: null,
+        savings: null,
+        loyaltyEarned: null,
+        minimumOrder: null,
+        lines: lines.map(([pid, quantity]) => ({ pid, name: `Produit ${pid}`, quantity })),
+    }) as unknown as Cart;
+
+describe("cartChanges", () => {
+    it("reports each request against what the cart holds afterwards", () => {
+        const before = cartOf([
+            ["1", 1],
+            ["2", 3],
+        ]);
+        const after = cartOf([
+            ["1", 2],
+            ["3", 10],
+        ]);
+        const changes = cartChanges(
+            [
+                { pid: "1", quantity: 2 },
+                { pid: "2", quantity: 0 },
+                { pid: "3", quantity: 12 },
+                { pid: "4", quantity: 1 },
+            ],
+            before,
+            after,
+            new Map([["4", "Produit indisponible"]]),
+        );
+        expect(changes).toEqual([
+            {
+                pid: "1",
+                name: "Produit 1",
+                before: 1,
+                after: 2,
+                requested: 2,
+                done: true,
+                note: null,
+            },
+            {
+                pid: "2",
+                name: "Produit 2",
+                before: 3,
+                after: 0,
+                requested: 0,
+                done: true,
+                note: null,
+            },
+            {
+                pid: "3",
+                name: "Produit 3",
+                before: 0,
+                after: 10,
+                requested: 12,
+                done: false,
+                note: "Capped by the site (maximum quantity or stock).",
+            },
+            {
+                pid: "4",
+                name: null,
+                before: 0,
+                after: 0,
+                requested: 1,
+                done: false,
+                note: "Produit indisponible",
+            },
+        ]);
+    });
+});
+
+describe("cartDiff", () => {
+    it("lists the lines whose quantity changed", () => {
+        const before = cartOf([["1", 1]]);
+        const after = cartOf([
+            ["1", 1],
+            ["2", 2],
+        ]);
+        expect(cartDiff(before, after)).toEqual([
+            {
+                pid: "2",
+                name: "Produit 2",
+                before: 0,
+                after: 2,
+                requested: null,
+                done: true,
+                note: null,
+            },
+        ]);
     });
 });

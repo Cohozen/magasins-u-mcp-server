@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { parseOffers, parseTransactions } from "./client-area.ts";
-import { parseSlots } from "./drive.ts";
+import { checkoutTime, isSameSlot, parseBookedSlot, parseSlots } from "./drive.ts";
 
 // Answers shaped like the real ones, with invented ids, stores and amounts.
 
@@ -138,5 +138,27 @@ describe("parseSlots", () => {
 
     it("refuses an answer without success", () => {
         expect(() => parseSlots('{"success":false}')).toThrow(/pickup slots/);
+    });
+});
+
+describe("checkoutTime", () => {
+    it("rebuilds the date format the checkout expects", () => {
+        expect(checkoutTime("2026-02-03T16:00")).toBe("20260203 16:00:00");
+    });
+});
+
+describe("parseBookedSlot", () => {
+    it("reads the booked slot from the header fragment", () => {
+        const html =
+            '<div class="slot"> <span>super u</span>\n <span>\n Jeu. 05/02 de 12h00 à 13h00 \n</span></div>';
+        const label = parseBookedSlot(html);
+        expect(label).toBe("Jeu. 05/02 de 12h00 à 13h00");
+        const slot = { id: "1", start: "2026-02-05T12:00", end: "2026-02-05T13:00", booked: 0 };
+        expect(isSameSlot(label ?? "", slot)).toBe(true);
+        expect(isSameSlot(label ?? "", { ...slot, start: "2026-02-05T13:00" })).toBe(false);
+    });
+
+    it("returns null when no slot is booked", () => {
+        expect(parseBookedSlot("<div>Choisir un créneau</div>")).toBeNull();
     });
 });

@@ -39,8 +39,11 @@ const WINDOW = { width: 1280, height: 800 };
 export type SessionState = "starting" | "ok" | "needs_login" | "needs_challenge" | "blocked";
 type HumanState = "needs_login" | "needs_challenge";
 
-/** An error whose message is meant for the agent as is: it says what to do. */
-export class SiteUnavailableError extends Error {}
+/** An error whose message is meant for the agent as is: it says what went wrong or what to do. */
+export class ToolError extends Error {}
+
+/** The site cannot be used right now (login, Cloudflare check, refusal, daily cap). */
+export class SiteUnavailableError extends ToolError {}
 
 // --- Pure helpers -----------------------------------------------------------------------------
 

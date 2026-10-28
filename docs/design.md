@@ -94,7 +94,7 @@ Names and parameters of planned tools are indicative. Results are compact JSON, 
 | `search_products` | ✅ | `/recherche?q=` (tile tracking JSON + visible text) | id, EAN, name, brand, price, unit price, offer, promotion, pack size, washes |
 | `get_product` | ✅ | `Product-Show?pid=` (tile JSON + product sheet sections) | tile fields, Nutri-Score, ingredients, nutrition and other sections |
 | `get_promotions` | ✅ | `/c/promotions?promos=cardu-promo&start=&sz=` | promoted tiles with offer and end date, 20 per page |
-| `get_cart` | ✅ | `/panier` (cart rows: tile JSON, `Quantity` input, visible amounts) | lines with quantity and discounted amount, estimated total, savings, minimum order |
+| `get_cart` | ✅ | `/panier` (cart rows: tile JSON, `Quantity` input, visible amounts), `Home-IncludeNavigationSlotTimeInfo` | lines with quantity and discounted amount, estimated total, savings, minimum order, booked slot |
 | `get_lists` / `get_list` | ✅ | `/mon-compte/mes-listes`, `…?listID=&start=&sz=` | lists, then a list's products (paginated) |
 | `get_recent_purchases` | ✅ | `/mon-compte/mes-listes?isPref=true&start=&sz=` | recently bought products |
 | `get_orders` / `get_order` | ✅ | `/mon-compte/mes-commandes`, `/mon-compte/mes-commandes-encours/detail?orderId=` | orders, then an order's lines with quantity and amount |
@@ -102,16 +102,21 @@ Names and parameters of planned tools are indicative. Results are compact JSON, 
 | `get_receipts` / `get_receipt` | ✅ | account API `POST /moncompte/etickets`, `GET /moncompte/etickets/{id}/{n}/download` (PDF) | transactions, then a parsed till receipt (lines, discounts, totals, consistency checks) |
 | `get_loyalty` | ✅ | account area page + account API `GET /mesoffres/v2` | Carte U balance and digital offers |
 
-### Write (planned)
+### Write
 
-| Tool | Source | Safeguard |
-|---|---|---|
-| `set_cart_quantity` | `POST Cart-AddProduct` (`Quantity=0` removes) | quantity capped per line |
-| `add_list_to_cart` | "Ajouter la liste au panier" | returns what could not be added |
-| `create_list` / `update_list` / `delete_list` | `Wishlist-CreateMyWishlistWeb`, `Wishlist-EditListV2` | `delete_list` refused without `confirm: true` |
-| `book_slot` | `POST Checkout-SetShipping` | — |
-| `prepare_order` | checkout up to the summary | returns items, unavailable items, total, slot, payment mode and a token valid 10 minutes |
-| `place_order` | final validation | off by default (`ALLOW_PLACE_ORDER=false`); refused if the cart or slot changed since `prepare_order`, or if payment is not at pickup |
+| Tool | Status | Source | Safeguard |
+|---|---|---|---|
+| `set_cart_items` | ✅ | `POST Cart-AddProduct` (`update=true` sets the quantity of a line in the cart, `Quantity=0` removes it; `update=false` adds) | absolute quantities, 24 at most per line; report built from the cart page afterwards |
+| `add_list_to_cart` | ✅ | `POST Wishlist-AddToCartWeb` (`listID`) | report of the cart lines that changed |
+| `create_list` / `delete_list` | ✅ | `GET Wishlist-CreateMyWishlistWeb` (`listName`), `POST Wishlist-EditListV2` (`action=remove`) | `delete_list` refused without `confirm: true` |
+| `add_to_list` / `remove_from_list` | ✅ | `POST Wishlist-AddToLists` / `Wishlist-RemoveFromLists` (`listIds`, `listInfo={"items":[{codeUC, pdtName, quantity}]}`) | list product count before and after |
+| `book_slot` | ✅ | `POST Checkout-SetShipping` (`dwfrm_shipping_*` fields, dates as `YYYYMMDD HH:MM:SS`) | slot must be one `get_slots` offers; done only if the header (`Home-IncludeNavigationSlotTimeInfo`) then shows that slot |
+| `prepare_order` | planned | checkout up to the summary | returns items, unavailable items, total, slot, payment mode and a token valid 10 minutes |
+| `place_order` | planned | final validation | off by default (`ALLOW_PLACE_ORDER=false`); refused if the cart or slot changed since `prepare_order`, or if payment is not at pickup |
+
+Writes call the site's own controllers as its scripts do (`src/coursesu/form.ts`): form fields,
+`format=ajax` and the page's `csrf_token`. Controller names come from the `Urls` map every page
+embeds; the request formats were read in the site's public scripts.
 
 Every write returns an **execution report**: what was done, what was not and why (out of stock,
 capped quantity, substituted product). Without it, the real state and the assumed state drift
@@ -165,13 +170,12 @@ before `place_order` and `delete_list`.
    challenge frequency with Chrome vs Chromium, and the session lifetime.
 2. **Read** ✅: product page, promotions, cart, lists, orders, slots, receipts (PDF parser),
    loyalty.
-3. **Write**: cart, lists, slot booking.
+3. **Write** ✅: cart, lists, slot booking.
 4. **Order**: `prepare_order`, then `place_order` on a real order with a person watching.
 
 ## Open points
 
 - Session lifetime and challenge frequency (see above).
-- The `items` format of `Wishlist-EditListV2`, to add a product to a list.
 - Checkout steps after the slot choice, up to pay-at-pickup validation.
 - Fallback if web sessions prove too short: the mobile app may use longer-lived tokens
   (`isMobileApp` shows in the authorisation URLs). Only worth studying if the web session does

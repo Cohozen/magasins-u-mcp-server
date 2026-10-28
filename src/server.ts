@@ -10,15 +10,24 @@ import { readFileSync } from "node:fs";
 import { createServer, type IncomingMessage } from "node:http";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
-import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
+import type { CallToolResult, ToolAnnotations } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
-import { Site, SiteUnavailableError } from "./browser.ts";
+import { Site, ToolError } from "./browser.ts";
 import { loadConfig } from "./config.ts";
-import { getList, getLists, getOrder, getOrders, getRecentPurchases } from "./coursesu/account.ts";
-import { getCart } from "./coursesu/cart.ts";
+import {
+    changeList,
+    createList,
+    deleteList,
+    getList,
+    getLists,
+    getOrder,
+    getOrders,
+    getRecentPurchases,
+} from "./coursesu/account.ts";
+import { addListToCart, getCart, setCartItems } from "./coursesu/cart.ts";
 import { getProduct, getPromotions, searchProducts } from "./coursesu/catalog.ts";
 import { getLoyalty, getReceipt, getReceipts } from "./coursesu/client-area.ts";
-import { getSlots } from "./coursesu/drive.ts";
+import { bookSlot, getSlots } from "./coursesu/drive.ts";
 import { log } from "./log.ts";
 
 const config = loadConfig();
@@ -50,7 +59,7 @@ const reply = (data: unknown): CallToolResult => ({
 
 /** An expected unavailability is told to the agent; anything else is logged and summarised. */
 const failure = (error: unknown): CallToolResult => {
-    if (error instanceof SiteUnavailableError) {
+    if (error instanceof ToolError) {
         return { isError: true, content: [{ type: "text", text: error.message }] };
     }
     log.error("unexpected error", { error: String(error) });
@@ -107,13 +116,14 @@ const buildServer = (): McpServer => {
         },
     );
 
-    /** A read-only tool: one queued site task, its result as JSON, failures told to the agent. */
-    const readTool = <Shape extends z.ZodRawShape>(
+    /** A tool: one queued site task, its result as JSON, failures told to the agent. */
+    const tool = <Shape extends z.ZodRawShape>(
         name: string,
         title: string,
         description: string,
         inputSchema: Shape,
         task: (args: z.infer<z.ZodObject<Shape>>) => Promise<unknown>,
+        annotations: ToolAnnotations = { readOnlyHint: true, openWorldHint: true },
     ): void => {
         const callback = async (args: unknown): Promise<CallToolResult> => {
             try {
@@ -122,18 +132,23 @@ const buildServer = (): McpServer => {
                 return failure(error);
             }
         };
+        // The SDK validates `args` against `inputSchema`; its callback type does not follow a
+        // generic shape, hence the cast.
         server.registerTool(
             name,
-            {
-                title,
-                description,
-                inputSchema,
-                annotations: { readOnlyHint: true, openWorldHint: true },
-            },
-            // The SDK validates `args` against `inputSchema`; its callback type does not follow a
-            // generic shape, hence the cast.
+            { title, description, inputSchema, annotations },
             callback as never,
         );
+    };
+    const WRITE: ToolAnnotations = {
+        readOnlyHint: false,
+        destructiveHint: false,
+        openWorldHint: true,
+    };
+    const DESTRUCTIVE: ToolAnnotations = {
+        readOnlyHint: false,
+        destructiveHint: true,
+        openWorldHint: true,
     };
 
     const page = z
@@ -144,7 +159,7 @@ const buildServer = (): McpServer => {
         .default(1)
         .describe("Results page, 20 products per page");
 
-    readTool(
+    tool(
         "search_products",
         "Search products",
         'Searches Courses U products in the selected store and returns the first results: price, price per kilo or litre, promotion, pack size and, for laundry detergent, price per wash. Product data is in French, as on the site. To find the cheapest, compare unitPrice (or pricePerWash), not price. These are single-item prices: a multi-buy offer (offer "2+1 OFFERT", "-80% SUR LE 2ÈME", details in promotion) lowers the real price when buying several, which is worth pointing out. Returns the first results page only (about twenty products).',
@@ -169,7 +184,7 @@ const buildServer = (): McpServer => {
         },
     );
 
-    readTool(
+    tool(
         "get_product",
         "Product sheet",
         "Returns a product's sheet: price and promotion as in search results, plus Nutri-Score, ingredients, nutrition values, legal name, storage and other sections as displayed (in French).",
@@ -185,7 +200,7 @@ const buildServer = (): McpServer => {
             (await getProduct(site, product)) ?? { error: "No product found at this address." },
     );
 
-    readTool(
+    tool(
         "get_promotions",
         "Store promotions",
         "Lists the products on promotion in the selected store, 20 per page, with the offer and its end date. Several hundred products are on promotion: prefer search_products for a given need, and browse a page or two at most.",
@@ -193,15 +208,15 @@ const buildServer = (): McpServer => {
         ({ page }) => getPromotions(site, page),
     );
 
-    readTool(
+    tool(
         "get_cart",
         "Cart",
-        "Returns the cart: each line with quantity, amount after multi-buy discount and what it puts on the Carte U, then the estimated total, savings and the minimum order amount. The total is an estimate: promotions depend on the pickup date.",
+        "Returns the cart: each line with quantity, amount after multi-buy discount and what it puts on the Carte U, then the estimated total, savings, the minimum order amount and the booked pickup slot. The total is an estimate: promotions depend on the pickup date.",
         {},
         () => getCart(site),
     );
 
-    readTool(
+    tool(
         "get_lists",
         "Shopping lists",
         "Lists the account's shopping lists on the site: id, name and number of products.",
@@ -209,7 +224,7 @@ const buildServer = (): McpServer => {
         () => getLists(site),
     );
 
-    readTool(
+    tool(
         "get_list",
         "Shopping list content",
         "Returns the products of one shopping list, 20 per page, with current prices.",
@@ -220,7 +235,7 @@ const buildServer = (): McpServer => {
         ({ listId, page }) => getList(site, listId, page),
     );
 
-    readTool(
+    tool(
         "get_recent_purchases",
         "Recently bought products",
         'Returns the products the account bought before ("Mes achats récents"), 20 per page, with current prices. Useful to reorder usual products.',
@@ -228,7 +243,7 @@ const buildServer = (): McpServer => {
         ({ page }) => getRecentPurchases(site, page),
     );
 
-    readTool(
+    tool(
         "get_orders",
         "Drive orders",
         "Lists the account's drive orders: id, date, status, store and total.",
@@ -236,7 +251,7 @@ const buildServer = (): McpServer => {
         () => getOrders(site),
     );
 
-    readTool(
+    tool(
         "get_order",
         "Drive order detail",
         "Returns one drive order: status, total, payment, and every line with the quantity ordered and what it cost.",
@@ -244,7 +259,7 @@ const buildServer = (): McpServer => {
         ({ orderId }) => getOrder(site, orderId),
     );
 
-    readTool(
+    tool(
         "get_slots",
         "Pickup slots",
         "Lists the drive pickup slots of the selected store for the coming days, with how many orders are already booked on each. Reading slots books nothing.",
@@ -252,7 +267,7 @@ const buildServer = (): McpServer => {
         () => getSlots(site),
     );
 
-    readTool(
+    tool(
         "get_receipts",
         "Till receipts",
         "Lists the purchases made with the Carte U over the last months (in store or drive): transaction id, date, amount, store, and whether a till receipt can be read with get_receipt.",
@@ -260,7 +275,7 @@ const buildServer = (): McpServer => {
         () => getReceipts(site),
     );
 
-    readTool(
+    tool(
         "get_receipt",
         "Till receipt detail",
         "Reads one till receipt: every line as printed (label, quantity or weight, unit price, amount, line rebate), immediate discounts and totals. The receipt is checked for consistency; one that does not add up is refused rather than returned wrong.",
@@ -273,12 +288,110 @@ const buildServer = (): McpServer => {
         ({ transactionId }) => getReceipt(site, transactionId),
     );
 
-    readTool(
+    tool(
         "get_loyalty",
         "Carte U balance and offers",
         "Returns the Carte U balance (euros to spend in store) and the digital offers: available to activate, activated, and used with what they earned.",
         {},
         () => getLoyalty(site),
+    );
+
+    const pid = z.string().regex(/^\d+$/).describe("Product id (pid), from another tool");
+    const listId = z.string().regex(/^\d+$/).describe("List id, from get_lists");
+    const listProducts = z
+        .array(
+            z.object({
+                pid,
+                name: z
+                    .string()
+                    .trim()
+                    .min(1)
+                    .max(255)
+                    .describe("Product name, as returned by the site"),
+            }),
+        )
+        .min(1)
+        .max(30);
+
+    tool(
+        "set_cart_items",
+        "Set cart quantities",
+        "Sets the quantity of products in the cart: adds them, changes their quantity, or removes them with quantity 0. Quantities are absolute, not added to what the cart holds. Returns an execution report built from the cart afterwards: for each product the quantity before, after, and why it differs from the request (unavailable, capped). Only change the cart as the user asked.",
+        {
+            items: z
+                .array(
+                    z.object({
+                        pid,
+                        quantity: z
+                            .number()
+                            .int()
+                            .min(0)
+                            .max(24)
+                            .describe("Quantity wanted; 0 removes"),
+                    }),
+                )
+                .min(1)
+                .max(30),
+        },
+        ({ items }) => setCartItems(site, items),
+        WRITE,
+    );
+
+    tool(
+        "add_list_to_cart",
+        "Add a list to the cart",
+        'Adds every available product of a shopping list to the cart, as the site\'s "Ajouter la liste au panier" button does. Returns the cart lines that changed and the new total.',
+        { listId },
+        ({ listId }) => addListToCart(site, listId),
+        WRITE,
+    );
+
+    tool(
+        "create_list",
+        "Create a shopping list",
+        "Creates an empty shopping list on the account. Returns the new list and its id.",
+        { name: z.string().trim().min(1).max(60).describe("List name") },
+        ({ name }) => createList(site, name),
+        WRITE,
+    );
+
+    tool(
+        "delete_list",
+        "Delete a shopping list",
+        "Deletes a shopping list and its products, for good. Ask the user for an explicit confirmation naming the list first, then call with confirm: true.",
+        {
+            listId,
+            confirm: z.literal(true).describe("true once the user confirmed this deletion"),
+        },
+        ({ listId }) => deleteList(site, listId),
+        DESTRUCTIVE,
+    );
+
+    tool(
+        "add_to_list",
+        "Add products to a list",
+        "Adds products to a shopping list. Returns the list's product count before and after.",
+        { listId, products: listProducts },
+        ({ listId, products }) => changeList(site, listId, "add", products),
+        WRITE,
+    );
+
+    tool(
+        "remove_from_list",
+        "Remove products from a list",
+        "Removes products from a shopping list. Returns the list's product count before and after.",
+        { listId, products: listProducts },
+        ({ listId, products }) => changeList(site, listId, "remove", products),
+        DESTRUCTIVE,
+    );
+
+    tool(
+        "book_slot",
+        "Book a pickup slot",
+        "Reserves a drive pickup slot (from get_slots) for the current cart. It orders and pays nothing; the reservation lasts a limited time and promotions may depend on the pickup date. Book only the slot the user chose.",
+        { slotId: z.string().regex(/^\d+$/).describe("Slot id, from get_slots") },
+        ({ slotId }) => bookSlot(site, slotId),
+        WRITE,
     );
 
     return server;
