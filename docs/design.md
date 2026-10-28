@@ -89,15 +89,15 @@ Names and parameters of planned tools are indicative. Results are compact JSON, 
 |---|---|---|---|
 | `session_status` | ✅ | `Account-GetAuthenticationInfo` | signed in or not, store, requests today, human action link |
 | `search_products` | ✅ | `/recherche?q=` (tile tracking JSON + visible text) | id, EAN, name, brand, price, unit price, offer, promotion, pack size, washes |
-| `get_product` | planned | `/p/…/{pid}.html` (schema.org ld+json + page text) | description, ingredients, nutrition |
-| `get_promotions` | planned | `/c/promotions?promos=cardu-promo` | promoted tiles with offer and end date |
-| `get_cart` | planned | `/panier?format=ajax` | lines, quantities, estimated total, chosen slot |
-| `get_lists` / `get_list` | planned | `/mon-compte/mes-listes` | lists, then a list's products (paginated) |
-| `get_recent_purchases` | planned | "Mes achats récents" tab | recently bought products |
-| `get_orders` / `get_order` | planned | `/mon-compte/mes-commandes`, `…/detail?orderId=`, `…/commander-a-nouveau?ctaOrderId=` | orders, then an order's items at current prices |
-| `get_slots` | planned | `DeliverySlot-GetDeliverySlotsWeb` | pickup slots: id, start, end, load |
-| `get_receipts` / `get_receipt` | planned | account API `POST /moncompte/etickets`, `GET /moncompte/etickets/{id}/0/download` (PDF) | till receipts, then a parsed receipt (lines, discounts, totals, consistency checks) |
-| `get_loyalty` | planned | account API `GET /moncompte/v2/monEspaceFidelite` | loyalty card balance and savings |
+| `get_product` | ✅ | `Product-Show?pid=` (tile JSON + product sheet sections) | tile fields, Nutri-Score, ingredients, nutrition and other sections |
+| `get_promotions` | ✅ | `/c/promotions?promos=cardu-promo&start=&sz=` | promoted tiles with offer and end date, 20 per page |
+| `get_cart` | ✅ | `/panier` (cart rows: tile JSON, `Quantity` input, visible amounts) | lines with quantity and discounted amount, estimated total, savings, minimum order |
+| `get_lists` / `get_list` | ✅ | `/mon-compte/mes-listes`, `…?listID=&start=&sz=` | lists, then a list's products (paginated) |
+| `get_recent_purchases` | ✅ | `/mon-compte/mes-listes?isPref=true&start=&sz=` | recently bought products |
+| `get_orders` / `get_order` | ✅ | `/mon-compte/mes-commandes`, `/mon-compte/mes-commandes-encours/detail?orderId=` | orders, then an order's lines with quantity and amount |
+| `get_slots` | ✅ | `DeliverySlot-GetDeliverySlotsWeb` (csrf token from the cart page) | pickup slots: id, start, end, orders booked |
+| `get_receipts` / `get_receipt` | ✅ | account API `POST /moncompte/etickets`, `GET /moncompte/etickets/{id}/{n}/download` (PDF) | transactions, then a parsed till receipt (lines, discounts, totals, consistency checks) |
+| `get_loyalty` | ✅ | account area page + account API `GET /mesoffres/v2` | Carte U balance and digital offers |
 
 ### Write (planned)
 
@@ -126,7 +126,14 @@ before `place_order` and `delete_list`.
 - The account area is a separate app calling
   `https://ext-api.systeme-u.com/espaceclient-comptes-process-api/v1` with a bearer token added by
   the page's own script: read those answers by intercepting the page's responses rather than
-  handling the token.
+  handling the token. The one exception is the receipt PDF, which the page only fetches on a
+  click: `get_receipt` repeats the page's own request headers for that single call, in memory.
+  The API sends dates in UTC without a zone suffix.
+- Product grids (search, promotions, lists, recent purchases) and order lines all carry the same
+  tracking JSON (`data-tc-product-tile`); grids page with `start` and `sz`.
+- Till receipts are PDFs printed on a fixed-pitch grid: `text-grid.ts` rebuilds the grid from the
+  PDF text layer (pdfjs), `receipt.ts` reads it and rejects any receipt whose totals do not add
+  up.
 - Login goes through ForgeRock at `moncompte.magasins-u.com` (OIDC with PKCE), behind Cloudflare
   Turnstile.
 
@@ -153,7 +160,7 @@ before `place_order` and `delete_list`.
 1. **Foundation** ✅: browser layer, keep-alive, noVNC for login and challenges,
    `session_status`, `search_products`, Docker image. Still to measure on a real Docker host:
    challenge frequency with Chrome vs Chromium, and the session lifetime.
-2. **Read**: product page, promotions, cart, lists, orders, slots, receipts (PDF parser),
+2. **Read** ✅: product page, promotions, cart, lists, orders, slots, receipts (PDF parser),
    loyalty.
 3. **Write**: cart, lists, slot booking.
 4. **Order**: `prepare_order`, then `place_order` on a real order with a person watching.
@@ -163,7 +170,6 @@ before `place_order` and `delete_list`.
 - Session lifetime and challenge frequency (see above).
 - The `items` format of `Wishlist-EditListV2`, to add a product to a list.
 - Checkout steps after the slot choice, up to pay-at-pickup validation.
-- URL of the loyalty offers (`/mesoffres/v2`).
 - Fallback if web sessions prove too short: the mobile app may use longer-lived tokens
   (`isMobileApp` shows in the authorisation URLs). Only worth studying if the web session does
   not hold.

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseTile, washesOf } from "./catalog.ts";
+import { parseProductPage, parseTile, washesOf } from "./catalog.ts";
 
 // Texts captured from real search tiles ("lessive"), with a store selected.
 const tracking = (fields: Record<string, unknown>): string =>
@@ -156,5 +156,46 @@ describe("washesOf", () => {
         expect(washesOf("PERSIL 3x43 lavages")).toBe(129);
         expect(washesOf("Ariel 40 Lavages")).toBe(40);
         expect(washesOf("Lessive 1,8L")).toBeNull();
+    });
+});
+
+describe("parseProductPage", () => {
+    it("adds the Nutri-Score and the product sheet sections to the tile", () => {
+        const product = parseProductPage({
+            tile: {
+                tracking: tracking({
+                    id: "1177338",
+                    name: "Pâtes Coquillettes qualité supérieure, 1kg",
+                    EAN: "3256221111613",
+                    brand: "PRODUIT U",
+                    price: "1.42",
+                }),
+                text: "1 euros 42 centimes 1,42 € 1,42 €/kg Ajouter à mon panier",
+                href: "https://www.coursesu.com/p/pates-coquillettes-qualite-superieure-1kg/1177338.html",
+            },
+            nutriscore: "Nutriscore A",
+            sections: [
+                ["Informations complémentaires", "Dénomination légale : Pâtes alimentaires"],
+                ["Ingrédients", "Semoule de BLÉ dur de qualité supérieure"],
+                [
+                    "Informations nutritionnelles",
+                    "Le Nutri-score est un logo qui informe sur la qualité nutritionnelle d'un produit.\nEn savoir plus sur le Nutriscore",
+                ],
+                ["Valeurs nutritionnelles", "(100 g) Energie : 1500 kJ/354kcal, Sel : 0.02 g."],
+                ["Conseils", "Idéal avec du fromage"],
+            ],
+        });
+        expect(product).toMatchObject({
+            pid: "1177338",
+            price: 1.42,
+            unitPrice: { value: 1.42, per: "kg" },
+            nutriscore: "A",
+            details: {
+                "Informations complémentaires": "Dénomination légale : Pâtes alimentaires",
+                Ingrédients: "Semoule de BLÉ dur de qualité supérieure",
+                "Valeurs nutritionnelles": "(100 g) Energie : 1500 kJ/354kcal, Sel : 0.02 g.",
+            },
+        });
+        expect(Object.keys(product?.details ?? {})).toHaveLength(3);
     });
 });

@@ -17,7 +17,7 @@ import { randomInt } from "node:crypto";
 import { appendFile, mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
-import { type BrowserContext, type Cookie, chromium, type Page } from "patchright";
+import { type BrowserContext, type Cookie, chromium, type Page, type Response } from "patchright";
 import type { Config, Range } from "./config.ts";
 import { log } from "./log.ts";
 import { startVnc, type Vnc } from "./vnc.ts";
@@ -160,6 +160,22 @@ export class Site {
         if (status === 403 || status === 429)
             throw this.block(`HTTP ${status} on ${new URL(url).pathname}`);
         return page;
+    }
+
+    /**
+     * Loads a page and waits for a call its own scripts make (the account area fetches its data
+     * from an API with a token only the page holds). Returns that response as the page got it.
+     */
+    async gotoAndWait(
+        url: string,
+        match: (response: Response) => boolean,
+    ): Promise<{ page: Page; response: Response }> {
+        const waiting = this.requirePage().waitForResponse(match, {
+            timeout: this.config.pageTimeoutMs,
+        });
+        waiting.catch(() => undefined);
+        const page = await this.goto(url);
+        return { page, response: await waiting };
     }
 
     /** Calls a site route from the page, with its cookies, after the pause. */

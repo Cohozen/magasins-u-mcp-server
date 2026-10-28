@@ -14,7 +14,11 @@ import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import { Site, SiteUnavailableError } from "./browser.ts";
 import { loadConfig } from "./config.ts";
-import { searchProducts } from "./coursesu/catalog.ts";
+import { getList, getLists, getOrder, getOrders, getRecentPurchases } from "./coursesu/account.ts";
+import { getCart } from "./coursesu/cart.ts";
+import { getProduct, getPromotions, searchProducts } from "./coursesu/catalog.ts";
+import { getLoyalty, getReceipt, getReceipts } from "./coursesu/client-area.ts";
+import { getSlots } from "./coursesu/drive.ts";
 import { log } from "./log.ts";
 
 const config = loadConfig();
@@ -103,39 +107,178 @@ const buildServer = (): McpServer => {
         },
     );
 
-    server.registerTool(
-        "search_products",
-        {
-            title: "Search products",
-            description:
-                'Searches Courses U products in the selected store and returns the first results: price, price per kilo or litre, promotion, pack size and, for laundry detergent, price per wash. Product data is in French, as on the site. To find the cheapest, compare unitPrice (or pricePerWash), not price. These are single-item prices: a multi-buy offer (offer "2+1 OFFERT", "-80% SUR LE 2ÈME", details in promotion) lowers the real price when buying several, which is worth pointing out. Returns the first results page only (about twenty products).',
-            inputSchema: {
-                query: z
-                    .string()
-                    .trim()
-                    .min(2)
-                    .max(100)
-                    .describe('Search terms, in French, e.g. "lessive liquide"'),
-                limit: z
-                    .number()
-                    .int()
-                    .min(1)
-                    .max(30)
-                    .default(15)
-                    .describe("Number of results (30 at most)"),
-            },
-            annotations: { readOnlyHint: true, openWorldHint: true },
-        },
-        async ({ query, limit }) => {
+    /** A read-only tool: one queued site task, its result as JSON, failures told to the agent. */
+    const readTool = <Shape extends z.ZodRawShape>(
+        name: string,
+        title: string,
+        description: string,
+        inputSchema: Shape,
+        task: (args: z.infer<z.ZodObject<Shape>>) => Promise<unknown>,
+    ): void => {
+        const callback = async (args: unknown): Promise<CallToolResult> => {
             try {
-                const products = await site.run("search_products", () =>
-                    searchProducts(site, query, limit),
-                );
-                return reply({ query, count: products.length, products });
+                return reply(await site.run(name, () => task(args as z.infer<z.ZodObject<Shape>>)));
             } catch (error) {
                 return failure(error);
             }
+        };
+        server.registerTool(
+            name,
+            {
+                title,
+                description,
+                inputSchema,
+                annotations: { readOnlyHint: true, openWorldHint: true },
+            },
+            // The SDK validates `args` against `inputSchema`; its callback type does not follow a
+            // generic shape, hence the cast.
+            callback as never,
+        );
+    };
+
+    const page = z
+        .number()
+        .int()
+        .min(1)
+        .max(50)
+        .default(1)
+        .describe("Results page, 20 products per page");
+
+    readTool(
+        "search_products",
+        "Search products",
+        'Searches Courses U products in the selected store and returns the first results: price, price per kilo or litre, promotion, pack size and, for laundry detergent, price per wash. Product data is in French, as on the site. To find the cheapest, compare unitPrice (or pricePerWash), not price. These are single-item prices: a multi-buy offer (offer "2+1 OFFERT", "-80% SUR LE 2ÈME", details in promotion) lowers the real price when buying several, which is worth pointing out. Returns the first results page only (about twenty products).',
+        {
+            query: z
+                .string()
+                .trim()
+                .min(2)
+                .max(100)
+                .describe('Search terms, in French, e.g. "lessive liquide"'),
+            limit: z
+                .number()
+                .int()
+                .min(1)
+                .max(30)
+                .default(15)
+                .describe("Number of results (30 at most)"),
         },
+        async ({ query, limit }) => {
+            const products = await searchProducts(site, query, limit);
+            return { query, count: products.length, products };
+        },
+    );
+
+    readTool(
+        "get_product",
+        "Product sheet",
+        "Returns a product's sheet: price and promotion as in search results, plus Nutri-Score, ingredients, nutrition values, legal name, storage and other sections as displayed (in French).",
+        {
+            product: z
+                .string()
+                .trim()
+                .min(1)
+                .max(300)
+                .describe("Product id (pid) from another tool, or the product URL"),
+        },
+        async ({ product }) =>
+            (await getProduct(site, product)) ?? { error: "No product found at this address." },
+    );
+
+    readTool(
+        "get_promotions",
+        "Store promotions",
+        "Lists the products on promotion in the selected store, 20 per page, with the offer and its end date. Several hundred products are on promotion: prefer search_products for a given need, and browse a page or two at most.",
+        { page },
+        ({ page }) => getPromotions(site, page),
+    );
+
+    readTool(
+        "get_cart",
+        "Cart",
+        "Returns the cart: each line with quantity, amount after multi-buy discount and what it puts on the Carte U, then the estimated total, savings and the minimum order amount. The total is an estimate: promotions depend on the pickup date.",
+        {},
+        () => getCart(site),
+    );
+
+    readTool(
+        "get_lists",
+        "Shopping lists",
+        "Lists the account's shopping lists on the site: id, name and number of products.",
+        {},
+        () => getLists(site),
+    );
+
+    readTool(
+        "get_list",
+        "Shopping list content",
+        "Returns the products of one shopping list, 20 per page, with current prices.",
+        {
+            listId: z.string().regex(/^\d+$/).describe("List id, from get_lists"),
+            page,
+        },
+        ({ listId, page }) => getList(site, listId, page),
+    );
+
+    readTool(
+        "get_recent_purchases",
+        "Recently bought products",
+        'Returns the products the account bought before ("Mes achats récents"), 20 per page, with current prices. Useful to reorder usual products.',
+        { page },
+        ({ page }) => getRecentPurchases(site, page),
+    );
+
+    readTool(
+        "get_orders",
+        "Drive orders",
+        "Lists the account's drive orders: id, date, status, store and total.",
+        {},
+        () => getOrders(site),
+    );
+
+    readTool(
+        "get_order",
+        "Drive order detail",
+        "Returns one drive order: status, total, payment, and every line with the quantity ordered and what it cost.",
+        { orderId: z.string().regex(/^\d+$/).describe("Order id, from get_orders") },
+        ({ orderId }) => getOrder(site, orderId),
+    );
+
+    readTool(
+        "get_slots",
+        "Pickup slots",
+        "Lists the drive pickup slots of the selected store for the coming days, with how many orders are already booked on each. Reading slots books nothing.",
+        {},
+        () => getSlots(site),
+    );
+
+    readTool(
+        "get_receipts",
+        "Till receipts",
+        "Lists the purchases made with the Carte U over the last months (in store or drive): transaction id, date, amount, store, and whether a till receipt can be read with get_receipt.",
+        {},
+        () => getReceipts(site),
+    );
+
+    readTool(
+        "get_receipt",
+        "Till receipt detail",
+        "Reads one till receipt: every line as printed (label, quantity or weight, unit price, amount, line rebate), immediate discounts and totals. The receipt is checked for consistency; one that does not add up is refused rather than returned wrong.",
+        {
+            transactionId: z
+                .string()
+                .regex(/^[\w-]{8,64}$/)
+                .describe("Transaction id, from get_receipts"),
+        },
+        ({ transactionId }) => getReceipt(site, transactionId),
+    );
+
+    readTool(
+        "get_loyalty",
+        "Carte U balance and offers",
+        "Returns the Carte U balance (euros to spend in store) and the digital offers: available to activate, activated, and used with what they earned.",
+        {},
+        () => getLoyalty(site),
     );
 
     return server;
