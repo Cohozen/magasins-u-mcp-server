@@ -42,6 +42,10 @@ The site is a real account behind Cloudflare. Use the `live-check` skill for any
 
 ## Commits and releases
 
+Commit often, in small steps that can each be reverted on their own: one tool, one fix, one docs
+change, as soon as check and tests pass. Keep a fix on its own branch and pull request, apart from
+feature work.
+
 Conventional commits (`feat:`, `fix:`, `docs:`, `chore:`…), subject in the imperative, in English.
 They drive the version: release-please keeps a release PR open that bumps `package.json` and
 writes `CHANGELOG.md` (`feat` → minor, `fix` → patch while in `0.x`). Never edit the version or
