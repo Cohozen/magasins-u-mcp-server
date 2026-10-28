@@ -6,7 +6,8 @@
  * Parsers are pure and tested; the `get…` functions only load a page and hand over its text.
  */
 
-import { ORIGIN, type Site } from "../browser.ts";
+import type { Page } from "patchright";
+import { ORIGIN, type Site, ToolError } from "../browser.ts";
 import {
     euros,
     type Product,
@@ -16,14 +17,15 @@ import {
     readTiles,
     squash,
 } from "./catalog.ts";
+import { callController, csrfToken } from "./form.ts";
 
 // --- Lists ------------------------------------------------------------------------------------
 
 export type ShoppingList = { id: string; name: string; productCount: number | null };
 
-export const getLists = async (site: Site): Promise<ShoppingList[]> => {
+const loadLists = async (site: Site): Promise<{ page: Page; lists: ShoppingList[] }> => {
     const page = await site.goto(`${ORIGIN}/mon-compte/mes-listes`);
-    return page.evaluate(() =>
+    const lists = await page.evaluate(() =>
         [...document.querySelectorAll("li[data-listid]")].map((item) => {
             const count = Number(item.querySelector(".list-product-count")?.textContent);
             return {
@@ -33,6 +35,91 @@ export const getLists = async (site: Site): Promise<ShoppingList[]> => {
             };
         }),
     );
+    return { page, lists };
+};
+
+export const getLists = async (site: Site): Promise<ShoppingList[]> =>
+    (await loadLists(site)).lists;
+
+/** A list write, then the lists as the site shows them afterwards: the execution report. */
+const listWrite = async (
+    site: Site,
+    write: (token: string, before: ShoppingList[]) => Promise<Record<string, unknown> | null>,
+) => {
+    const { page, lists: before } = await loadLists(site);
+    const answer = await write(await csrfToken(page), before);
+    const { lists: after } = await loadLists(site);
+    const error = answer?.error;
+    return {
+        siteError: typeof error === "string" && error !== "" ? error : null,
+        before,
+        after,
+    };
+};
+
+const requireList = (lists: ShoppingList[], listId: string): ShoppingList => {
+    const list = lists.find((candidate) => candidate.id === listId);
+    if (list === undefined)
+        throw new ToolError(`No list ${listId} on the account (see get_lists).`);
+    return list;
+};
+
+/** The site names a new list "Liste du <date>" unless given a name. */
+export const createList = async (site: Site, name: string) => {
+    const { siteError, before, after } = await listWrite(site, (token) =>
+        callController(site, "Wishlist-CreateMyWishlistWeb", token, { listName: name }, "GET"),
+    );
+    const created = after.filter((list) => !before.some((old) => old.id === list.id));
+    return { done: created.length === 1, created: created[0] ?? null, siteError };
+};
+
+export const deleteList = async (site: Site, listId: string) => {
+    const { siteError, after } = await listWrite(site, (token, before) =>
+        callController(site, "Wishlist-EditListV2", token, {
+            listId,
+            listName: requireList(before, listId).name,
+            action: "remove",
+        }),
+    );
+    return { done: !after.some((list) => list.id === listId), siteError, lists: after };
+};
+
+const listInfo = (products: { pid: string; name: string }[]): string =>
+    JSON.stringify({
+        items: products.map(({ pid, name }) => ({
+            codeUC: pid,
+            pdtName: name.slice(0, 255),
+            quantity: 1,
+        })),
+    });
+
+/** Adds products to a list, or removes them. Reports the list's product count before and after. */
+export const changeList = async (
+    site: Site,
+    listId: string,
+    action: "add" | "remove",
+    products: { pid: string; name: string }[],
+) => {
+    const { siteError, before, after } = await listWrite(site, (token, lists) => {
+        requireList(lists, listId);
+        return callController(
+            site,
+            action === "add" ? "Wishlist-AddToLists" : "Wishlist-RemoveFromLists",
+            token,
+            {
+                listIds: listId,
+                ...(action === "add" ? { isPref: "false" } : {}),
+                listInfo: listInfo(products),
+                action,
+            },
+        );
+    });
+    return {
+        listId,
+        productCountBefore: requireList(before, listId).productCount,
+        productCountAfter: after.find((list) => list.id === listId)?.productCount ?? null,
+        siteError,
+    };
 };
 
 export const getList = (site: Site, listId: string, page: number) =>

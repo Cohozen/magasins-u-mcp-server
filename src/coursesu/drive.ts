@@ -5,7 +5,8 @@
  * only; like every controller it wants the `csrf_token` of a page, hence one page load first.
  */
 
-import { CONTROLLER, ORIGIN, type Site } from "../browser.ts";
+import { CONTROLLER, ORIGIN, type Site, ToolError } from "../browser.ts";
+import { callController, csrfToken } from "./form.ts";
 
 type RawSlot = {
     slotId?: number | string;
@@ -55,16 +56,69 @@ export const parseSlots = (json: string): { fullyBooked: boolean; slots: Slot[] 
     };
 };
 
-export const getSlots = async (site: Site) => {
+const loadSlots = async (site: Site) => {
     const page = await site.goto(`${ORIGIN}/panier`);
-    const token = await page.evaluate(
-        () => document.querySelector<HTMLInputElement>('input[name="csrf_token"]')?.value ?? null,
+    const token = await csrfToken(page);
+    const answer = await site.fetchText(
+        `${CONTROLLER}/DeliverySlot-GetDeliverySlotsWeb?csrf_token=${encodeURIComponent(token)}`,
+        { method: "POST", body: "deliveryPoint=drive" },
     );
-    if (token === null) throw new Error("no csrf_token on the cart page");
-    return parseSlots(
+    return { token, ...parseSlots(answer) };
+};
+
+export const getSlots = async (site: Site) => {
+    const { fullyBooked, slots } = await loadSlots(site);
+    return { fullyBooked, slots };
+};
+
+/** "2026-10-28T16:00" → "20261028 16:00:00", the form the checkout expects. */
+export const checkoutTime = (local: string): string =>
+    `${local.replace(/-/g, "").replace("T", " ")}:00`;
+
+/** The slot the header shows once one is booked: "Jeu. 29/10 de 12h00 à 13h00". */
+export const parseBookedSlot = (html: string): string | null =>
+    /([\p{L}]+\.? \d{2}\/\d{2} de \d{2}h\d{2} à \d{2}h\d{2})/u.exec(
+        html.replace(/<[^>]*>/g, " ").replace(/\s+/g, " "),
+    )?.[1] ?? null;
+
+/** Whether the header's label is this slot: same day and month, same start hour. */
+export const isSameSlot = (label: string, slot: Slot): boolean => {
+    const [, month, day, hour, minute] =
+        /^\d{4}-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/.exec(slot.start) ?? [];
+    return label.includes(`${day}/${month} de ${hour}h${minute}`);
+};
+
+/** The booked pickup slot, as the site header shows it; null when none is booked. */
+export const getBookedSlot = async (site: Site): Promise<string | null> => {
+    const store = (await site.storeId()) ?? "";
+    return parseBookedSlot(
         await site.fetchText(
-            `${CONTROLLER}/DeliverySlot-GetDeliverySlotsWeb?csrf_token=${encodeURIComponent(token)}`,
-            { method: "POST", body: "deliveryPoint=drive" },
+            `${CONTROLLER}/Home-IncludeNavigationSlotTimeInfo?storeID=${encodeURIComponent(store)}&deliveryMethod=&slotId=`,
         ),
     );
+};
+
+/** Reserves a drive pickup slot for the current cart. Nothing is ordered or paid. */
+export const bookSlot = async (site: Site, slotId: string) => {
+    const { token, slots } = await loadSlots(site);
+    const slot = slots.find((candidate) => candidate.id === slotId);
+    if (slot === undefined) {
+        throw new ToolError(`Slot ${slotId} is not offered any more; call get_slots again.`);
+    }
+    const answer = await callController(site, "Checkout-SetShipping", token, {
+        dwfrm_shipping_shippingMethod: "drive",
+        dwfrm_shipping_slotId: slot.id,
+        dwfrm_shipping_slotDateBegin: checkoutTime(slot.start),
+        dwfrm_shipping_slotDateEnd: checkoutTime(slot.end),
+        dwfrm_shipping_drive_confirm: "x",
+    });
+    const error = answer?.error ?? answer?.errorMessage;
+    // The report trusts what the site shows afterwards, not the answer alone.
+    const booked = await getBookedSlot(site);
+    return {
+        done: booked !== null && isSameSlot(booked, slot),
+        requested: slot,
+        bookedSlot: booked,
+        siteError: typeof error === "string" && error !== "" ? error : null,
+    };
 };
