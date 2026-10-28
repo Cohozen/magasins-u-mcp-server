@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.0](https://github.com/Cohozen/magasins-u-mcp-server/compare/v0.1.0...v0.2.0) (2026-10-28)
+
+
+### Features
+
+* Add read tools for products, cart, lists, orders, slots, receipts and loyalty ([#4](https://github.com/Cohozen/magasins-u-mcp-server/issues/4)) ([56c5e12](https://github.com/Cohozen/magasins-u-mcp-server/commit/56c5e12207be127dabe44221375c6d832e376b9c))
+
 ## 0.1.0 (2026-10-27)
 
 
