@@ -56,6 +56,9 @@ expected to call the MCP endpoint directly rather than through an LLM.
 - **Persistent profile** in the volume (`/data/profile`), with `session.json` next to it (mode
   `0600`). Session cookies are injected at every launch and written again after every successful
   call, to follow their renewal by the site.
+- **Stale profile lock**: Chrome locks the profile with a symlink naming the host and process.
+  A recreated container has a new hostname, so a lock left by the old one made Chrome refuse
+  the profile in a loop. At startup, a lock naming another host or a dead process is removed.
 - **Single queue**: one site call at a time, whatever the number of MCP clients.
 - **Random pause** between two site requests (`DELAY_MS`, 3 to 8 seconds by default). A tool that
   loads several pages pays the pause on every page.

@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { isChallengeTitle, isNight, isSessionCookie, randomBetween } from "./browser.ts";
+import {
+    isChallengeTitle,
+    isNight,
+    isSessionCookie,
+    isStaleLock,
+    randomBetween,
+} from "./browser.ts";
 import { parseRange } from "./config.ts";
 
 describe("isNight", () => {
@@ -56,5 +62,21 @@ describe("parseRange", () => {
         expect(parseRange("X", "20-30")).toEqual([20, 30]);
         expect(parseRange("X", "23 - 7")).toEqual([23, 7]);
         expect(() => parseRange("X", "20")).toThrow("X is invalid");
+    });
+});
+
+describe("isStaleLock", () => {
+    const alive = (pid: number) => pid === 42;
+
+    it("keeps a lock held by a live process on this host", () => {
+        expect(isStaleLock("box-1-42", "box-1", alive)).toBe(false);
+    });
+
+    it("drops a lock left by another host (a recreated container)", () => {
+        expect(isStaleLock("fa081f91d569-25", "0b7c3e2a91de", alive)).toBe(true);
+    });
+
+    it("drops a lock left by a dead process on this host", () => {
+        expect(isStaleLock("box-1-7", "box-1", alive)).toBe(true);
     });
 });
