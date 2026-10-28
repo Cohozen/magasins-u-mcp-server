@@ -9,7 +9,8 @@
  * `parseTile` is pure and tested; only `searchProducts` touches the browser.
  */
 
-import { ORIGIN, type Site } from "../browser.ts";
+import type { Page } from "patchright";
+import { CONTROLLER, ORIGIN, type Site } from "../browser.ts";
 import { decimalToCents, parsePackage } from "./package-label.ts";
 
 /** What the page gives for one tile, uninterpreted. */
@@ -62,9 +63,9 @@ export type Product = {
 /** What the site shows when a product has no brand (loose produce). */
 const NO_BRAND = "SANS MARQUE";
 
-const squash = (value: string): string => value.replace(/\s+/g, " ").trim();
+export const squash = (value: string): string => value.replace(/\s+/g, " ").trim();
 
-const euros = (value: string | null | undefined): number | null => {
+export const euros = (value: string | null | undefined): number | null => {
     const cents = decimalToCents(value ?? null);
     return cents === null ? null : cents / 100;
 };
@@ -146,23 +147,122 @@ export const parseTile = (raw: RawTile): Product | null => {
     };
 };
 
+/** Grid tiles; product sheets and order lines carry the same JSON on other elements. */
+export const GRID_TILE = "li[data-tc-product-tile]";
+
+/** Reads the product tiles matching `selector`, uninterpreted. */
+export const readTiles = (page: Page, selector: string, limit: number): Promise<RawTile[]> =>
+    page.evaluate(
+        ([scope, max]) =>
+            [...document.querySelectorAll(scope)].slice(0, max).map((tile) => ({
+                tracking: tile.getAttribute("data-tc-product-tile"),
+                // biome-ignore lint/performance/useDomNodeTextContent: textContent glues neighbouring elements together ("12,25 €2,27 €/l"); innerText keeps the displayed separation
+                text: (tile as HTMLElement).innerText,
+                href: tile.querySelector('a[href*="/p/"]')?.getAttribute("href") ?? null,
+            })),
+        [selector, limit] as const,
+    );
+
 export const searchProducts = async (
     site: Site,
     query: string,
     limit: number,
 ): Promise<Product[]> => {
     const page = await site.goto(`${ORIGIN}/recherche?q=${encodeURIComponent(query)}`);
-    const tiles = await page.evaluate(
-        (max) =>
-            [...document.querySelectorAll("li[data-tc-product-tile]")]
-                .slice(0, max)
-                .map((tile) => ({
-                    tracking: tile.getAttribute("data-tc-product-tile"),
-                    // biome-ignore lint/performance/useDomNodeTextContent: textContent glues neighbouring elements together ("12,25 €2,27 €/l"); innerText keeps the displayed separation
-                    text: (tile as HTMLElement).innerText,
-                    href: tile.querySelector('a[href*="/p/"]')?.getAttribute("href") ?? null,
-                })),
-        limit,
-    );
+    const tiles = await readTiles(page, GRID_TILE, limit);
     return tiles.flatMap((tile) => parseTile(tile) ?? []);
+};
+
+/** Size of one results page on product grids (promotions, lists, recent purchases). */
+export const PAGE_SIZE = 20;
+
+/** One page of a product grid: `start` and `sz` work on every grid of the site. */
+export const productGridPage = async (
+    site: Site,
+    url: string,
+    page: number,
+): Promise<{ page: number; hasMore: boolean; products: Product[] }> => {
+    const target = new URL(url);
+    target.searchParams.set("start", String((page - 1) * PAGE_SIZE));
+    target.searchParams.set("sz", String(PAGE_SIZE));
+    const loaded = await site.goto(target.toString());
+    const products = (await readTiles(loaded, GRID_TILE, PAGE_SIZE)).flatMap(
+        (tile) => parseTile(tile) ?? [],
+    );
+    return { page, hasMore: products.length === PAGE_SIZE, products };
+};
+
+/** Store promotions ("Promotions" menu), as a product grid. */
+export const getPromotions = (site: Site, page: number) =>
+    productGridPage(site, `${ORIGIN}/c/promotions?promos=cardu-promo`, page);
+
+export type ProductDetails = Product & {
+    nutriscore: string | null;
+    /** Product sheet sections as displayed: "Ingrédients", "Valeurs nutritionnelles"… */
+    details: Record<string, string>;
+};
+
+/** Raw product sheet: the main tile, the Nutri-Score label and the sections, uninterpreted. */
+export type RawProductPage = {
+    tile: RawTile | null;
+    nutriscore: string | null;
+    sections: [heading: string, text: string][];
+};
+
+/** Sections that carry no product information. */
+const NOISE_SECTION = /^(conseils|idéal avec)$/i;
+
+export const parseProductPage = (raw: RawProductPage): ProductDetails | null => {
+    const product = raw.tile === null ? null : parseTile(raw.tile);
+    if (product === null) return null;
+    const details: Record<string, string> = {};
+    for (const [heading, text] of raw.sections) {
+        const key = squash(heading);
+        const value = squash(text)
+            // The Nutri-Score explanation is site boilerplate.
+            .replace(/Le Nutri-score est un logo.*?(En savoir plus sur le Nutriscore)?$/i, "")
+            .trim();
+        if (key === "" || value === "" || NOISE_SECTION.test(key) || key in details) continue;
+        details[key] = value;
+    }
+    return {
+        ...product,
+        nutriscore: /Nutriscore ([A-E])\b/i.exec(raw.nutriscore ?? "")?.[1]?.toUpperCase() ?? null,
+        details,
+    };
+};
+
+/** `1177338` or a product URL. */
+export const productUrl = (product: string): string =>
+    /^\d+$/.test(product)
+        ? `${CONTROLLER}/Product-Show?pid=${product}`
+        : new URL(product, ORIGIN).toString();
+
+export const getProduct = async (site: Site, product: string): Promise<ProductDetails | null> => {
+    const page = await site.goto(productUrl(product));
+    const raw = await page.evaluate((): RawProductPage => {
+        const content = document.querySelector("#product-content");
+        const tracking = content?.querySelector("[data-tc-product-tile]");
+        const sections: [string, string][] = [];
+        for (const heading of document.querySelectorAll("h3.tab-label")) {
+            const body = heading.closest("li")?.nextElementSibling as HTMLElement | null;
+            // biome-ignore lint/performance/useDomNodeTextContent: innerText keeps line breaks between paragraphs
+            sections.push([heading.textContent ?? "", body?.innerText ?? ""]);
+        }
+        return {
+            tile:
+                content && tracking
+                    ? {
+                          tracking: tracking.getAttribute("data-tc-product-tile"),
+                          // biome-ignore lint/performance/useDomNodeTextContent: see readTiles
+                          text: (content as HTMLElement).innerText,
+                          href: location.href,
+                      }
+                    : null,
+            nutriscore:
+                document.querySelector(".icon-nutriscore-pdp")?.getAttribute("aria-label") ?? null,
+            sections,
+        };
+    });
+    return parseProductPage(raw);
 };

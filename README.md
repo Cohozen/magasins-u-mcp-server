@@ -30,6 +30,17 @@ own internet connection.
 |---|---|
 | `session_status` | Signed in or not, selected store, requests made today; the link to open when a human action is needed. |
 | `search_products` | Searches the selected store: price, price per kilo or litre, promotion, pack size, price per wash for laundry detergent. |
+| `get_product` | A product sheet: Nutri-Score, ingredients, nutrition values and the other sections shown on the site. |
+| `get_promotions` | Products on promotion in the selected store, 20 per page. |
+| `get_cart` | The cart: lines with quantity and amount after multi-buy discounts, estimated total, savings. |
+| `get_lists` / `get_list` | The account's shopping lists, then one list's products with current prices. |
+| `get_recent_purchases` | Products bought before ("Mes achats récents"). |
+| `get_orders` / `get_order` | Drive orders, then one order's lines with quantities and amounts. |
+| `get_slots` | Drive pickup slots of the coming days. Reading them books nothing. |
+| `get_receipts` / `get_receipt` | Carte U purchases of the last months, then one till receipt read line by line and checked for consistency. |
+| `get_loyalty` | Carte U balance and digital offers (available, activated, used). |
+
+All tools only read. Writing tools (cart, lists, slot booking, order) are planned.
 
 Product data is returned in French, as shown on the site.
 
