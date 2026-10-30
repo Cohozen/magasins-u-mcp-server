@@ -46,6 +46,10 @@ Commit often, in small steps that can each be reverted on their own: one tool, o
 change, as soon as check and tests pass. Keep a fix on its own branch and pull request, apart from
 feature work.
 
+Pull requests are merged with "Rebase and merge" only: every commit of a pull request lands on
+`main` as is. So each commit must pass check and tests on its own and carry a conventional
+message; no "wip" or "fixup" commits (squash them locally before pushing).
+
 Conventional commits (`feat:`, `fix:`, `docs:`, `chore:`…), subject in the imperative, in English.
 They drive the version: release-please keeps a release PR open that bumps `package.json` and
 writes `CHANGELOG.md` (`feat` → minor, `fix` → patch while in `0.x`). Never edit the version or
