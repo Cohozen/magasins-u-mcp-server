@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
     isChallengeTitle,
     isNight,
@@ -6,7 +6,7 @@ import {
     isStaleLock,
     randomBetween,
 } from "./browser.ts";
-import { parseRange } from "./config.ts";
+import { loadConfig, parseRange } from "./config.ts";
 
 describe("isNight", () => {
     it("handles a night across midnight", () => {
@@ -78,5 +78,23 @@ describe("isStaleLock", () => {
 
     it("drops a lock left by a dead process on this host", () => {
         expect(isStaleLock("box-1-7", "box-1", alive)).toBe(true);
+    });
+});
+
+describe("keep-alive settings", () => {
+    afterEach(() => vi.unstubAllEnvs());
+    const withToken = () => vi.stubEnv("MCP_TOKEN", "test-token-0123456789abcdef");
+
+    it("keeps every default gap under the site's idle timeout", () => {
+        withToken();
+        const config = loadConfig();
+        expect(config.keepaliveDayMin[1]).toBeLessThanOrEqual(30);
+        expect(config.keepaliveNightMin[1]).toBeLessThanOrEqual(30);
+    });
+
+    it("refuses a gap long enough to lose the session", () => {
+        withToken();
+        vi.stubEnv("KEEPALIVE_NIGHT_MIN", "40-55");
+        expect(() => loadConfig()).toThrow(/KEEPALIVE_NIGHT_MIN: 55 is above 30/);
     });
 });
