@@ -22,7 +22,7 @@ in Docker on their own internet connection.
 | **The user's own IP address, no VPN and no proxy** | Cloudflare scores IP reputation: challenges show up behind a VPN and not on a home connection. The server has no proxy option on purpose. |
 | **One site call at a time, with a random pause between two** | Human pace, and a single session that never steps on itself. |
 | **Session cookies saved and injected again at launch, never Cloudflare's** | Session cookies (Salesforce `dwsid`, the ForgeRock SSO cookie) vanish when the browser closes. Without re-injection the session is lost on restart; with it, the session survives. Injecting a stale `cf_clearance`, on the contrary, triggered a challenge. |
-| **Keep-alive visits, day and night, never more than an hour apart** | The site drops the session after less than an hour of inactivity, even with a tab open (an open tab sends nothing). |
+| **Keep-alive visits, day and night, never more than 30 minutes apart** | The site drops the session after 30 to 45 minutes of inactivity, even with a tab open (an open tab sends nothing). |
 | **A Cloudflare challenge is solved by a person, through noVNC, never by the server** | Ticking the box automatically would be circumventing a protection. The server stops and returns a noVNC link for the agent to pass on. |
 | **Two-step order with a confirmation token, pay-at-pickup only** (planned) | An order commits the person. `prepare_order` returns a summary, `place_order` requires the token it produced. No payment data ever goes through the server. |
 | **The server's own access token** (`Authorization: Bearer`) | The server does not rely on whatever sits in front of it for protection. |
@@ -63,8 +63,8 @@ expected to call the MCP endpoint directly rather than through an LLM.
 - **Random pause** between two site requests (`DELAY_MS`, 3 to 8 seconds by default). A tool that
   loads several pages pays the pause on every page.
 - **Daily cap** on site requests (`DAILY_REQUEST_CAP`, 300 by default).
-- **Keep-alive**: a real page load (not a `fetch`) every 20–30 minutes by day and 40–55 at night,
-  drawn at random and capped at 60 minutes. Only a page load lets the silent SSO re-login
+- **Keep-alive**: a real page load (not a `fetch`) every 18–26 minutes, day and night, drawn at
+  random and capped at 30 minutes (see the session lifetime below). Only a page load lets the silent SSO re-login
   (`Login-OAuthSilentReentryForgerock`) run when the Salesforce session has expired, and lets
   Cloudflare's scripts run. A tool call counts as a visit and postpones the next one. Each visit
   is logged to `visits.jsonl`.
@@ -75,12 +75,12 @@ expected to call the MCP endpoint directly rather than through an LLM.
 - **Refusal**: an HTTP 403 or 429 without a challenge switches the state to `blocked` for
   `BLOCK_COOLDOWN_H` hours (24 by default). Nothing is retried.
 
-### Open question: idle timeout or maximum lifetime?
+### Session lifetime: an idle timeout of 30 to 45 minutes
 
-It is not known yet whether the session ends after an **idle timeout** (keep-alive is enough) or
-after a **maximum lifetime** (keep-alive cannot help; a periodic manual login is needed).
-`visits.jsonl` records `minutesSinceLogin` at every visit: if logouts keep happening at the same
-age despite keep-alive, it is a maximum lifetime.
+Measured with `visits.jsonl` on a Docker host: every gap of up to 30 minutes between two visits
+kept the session, both gaps of 44 minutes lost it, and sessions lasted over 5.5 hours with short
+gaps. So the session ends after 30 to 45 minutes without a visit; a maximum lifetime, if any, is
+longer than 5.5 hours. A second session on another machine does not end the first one.
 
 ## Tools
 
@@ -167,7 +167,7 @@ before `place_order` and `delete_list`.
 
 1. **Foundation** ✅: browser layer, keep-alive, noVNC for login and challenges,
    `session_status`, `search_products`, Docker image. Still to measure on a real Docker host:
-   challenge frequency with Chrome vs Chromium, and the session lifetime.
+   challenge frequency with Chrome vs Chromium.
 2. **Read** ✅: product page, promotions, cart, lists, orders, slots, receipts (PDF parser),
    loyalty.
 3. **Write** ✅: cart, lists, slot booking.
@@ -175,7 +175,8 @@ before `place_order` and `delete_list`.
 
 ## Open points
 
-- Session lifetime and challenge frequency (see above).
+- Challenge frequency with Chrome vs Chromium, and whether sessions have a maximum lifetime
+  beyond 5.5 hours.
 - Checkout steps after the slot choice, up to pay-at-pickup validation.
 - Fallback if web sessions prove too short: the mobile app may use longer-lived tokens
   (`isMobileApp` shows in the authorisation URLs). Only worth studying if the web session does

@@ -63,8 +63,8 @@ Product data is returned in French, as shown on the site.
   password and never solves a Cloudflare check for you.
 - **Human pace**: one site call at a time, 3 to 8 seconds between two requests, 300 requests a
   day at most.
-- **Session upkeep**: the site drops the session after less than an hour of inactivity, so the
-  server reloads a page every 20 to 30 minutes (40 to 55 at night), at irregular intervals. Each
+- **Session upkeep**: the site drops the session after 30 to 45 minutes of inactivity, so the
+  server reloads a page every 18 to 26 minutes, day and night, at irregular intervals. Each
   visit is logged in `/data/visits.jsonl`.
 - **Stop rather than insist**: expired session or Cloudflare check → the server stops, opens
   noVNC and the tool returns the link to open. The site refuses access (HTTP 403/429) → 24-hour
@@ -129,7 +129,7 @@ Every variable is described in [.env.example](.env.example). The main ones:
 | `BROWSER_CHANNEL` | `chrome` (Compose) | `chrome` or `chromium` |
 | `DELAY_MS` | `3000-8000` | Random pause between two site requests |
 | `DAILY_REQUEST_CAP` | `300` | Daily cap on site requests |
-| `KEEPALIVE_DAY_MIN` / `KEEPALIVE_NIGHT_MIN` | `20-30` / `40-55` | Keep-alive interval, in minutes |
+| `KEEPALIVE_DAY_MIN` / `KEEPALIVE_NIGHT_MIN` | `18-26` / `18-26` | Keep-alive interval, in minutes (30 at most: the site drops the session after 30 to 45 idle minutes) |
 
 ## Data and security
 
