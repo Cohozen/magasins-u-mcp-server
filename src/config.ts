@@ -26,6 +26,9 @@ export type Config = {
     vncPort: number;
 };
 
+/** Longest allowed gap between two keep-alive visits, in minutes. */
+const KEEPALIVE_CEILING_MIN = 30;
+
 const raw = (name: string): string | undefined => {
     const value = process.env[name]?.trim();
     return value === "" ? undefined : value;
@@ -83,12 +86,17 @@ export const loadConfig = (): Config => {
         delayMs: ordered("DELAY_MS", range("DELAY_MS", "3000-8000")),
         dailyCap: integer("DAILY_REQUEST_CAP", 300),
         blockCooldownHours: integer("BLOCK_COOLDOWN_H", 24),
-        // Capped at 60 minutes: the site drops the session after less than an hour of inactivity.
-        keepaliveDayMin: ordered("KEEPALIVE_DAY_MIN", range("KEEPALIVE_DAY_MIN", "20-30"), 60),
+        // Capped at 30 minutes: the site drops the session after 30 to 45 minutes without a
+        // visit (measured: every 30-minute gap held, both 44-minute gaps lost the session).
+        keepaliveDayMin: ordered(
+            "KEEPALIVE_DAY_MIN",
+            range("KEEPALIVE_DAY_MIN", "18-26"),
+            KEEPALIVE_CEILING_MIN,
+        ),
         keepaliveNightMin: ordered(
             "KEEPALIVE_NIGHT_MIN",
-            range("KEEPALIVE_NIGHT_MIN", "40-55"),
-            60,
+            range("KEEPALIVE_NIGHT_MIN", "18-26"),
+            KEEPALIVE_CEILING_MIN,
         ),
         nightHours,
         pageTimeoutMs: integer("PAGE_TIMEOUT_MS", 30_000),

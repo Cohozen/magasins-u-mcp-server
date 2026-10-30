@@ -7,8 +7,8 @@
  * - **the session survives a restart**: session cookies (which Chromium drops on exit) are saved
  *   after every call and injected again at launch. Never Cloudflare's: injecting a stale
  *   `cf_clearance` triggered a challenge during prototyping;
- * - **a keep-alive visit** reloads a page every 20–30 minutes (40–55 at night), because the site
- *   drops the session after less than an hour of inactivity;
+ * - **a keep-alive visit** reloads a page every 18–26 minutes, day and night, because the site
+ *   drops the session after 30 to 45 minutes of inactivity;
  * - **a Cloudflare challenge or an expired session stops everything** and opens noVNC so that a
  *   person can act. The server never ticks a box and never retries in a loop.
  */
