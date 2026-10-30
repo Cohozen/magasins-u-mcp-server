@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.1](https://github.com/Cohozen/magasins-u-mcp-server/compare/v0.3.0...v0.3.1) (2026-10-30)
+
+
+### Bug Fixes
+
+* Keep the session alive at night ([#10](https://github.com/Cohozen/magasins-u-mcp-server/issues/10)) ([a1541fa](https://github.com/Cohozen/magasins-u-mcp-server/commit/a1541fab7a2eb1b938d3cfcd8b9d0da20ba73293))
+
 ## [0.3.0](https://github.com/Cohozen/magasins-u-mcp-server/compare/v0.2.0...v0.3.0) (2026-10-28)
 
 
