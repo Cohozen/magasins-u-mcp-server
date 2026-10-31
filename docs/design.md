@@ -24,7 +24,7 @@ in Docker on their own internet connection.
 | **Session cookies saved and injected again at launch, never Cloudflare's** | Session cookies (Salesforce `dwsid`, the ForgeRock SSO cookie) vanish when the browser closes. Without re-injection the session is lost on restart; with it, the session survives. Injecting a stale `cf_clearance`, on the contrary, triggered a challenge. |
 | **Keep-alive visits, day and night, never more than 30 minutes apart** | The site drops the session after 30 to 45 minutes of inactivity, even with a tab open (an open tab sends nothing). |
 | **A Cloudflare challenge is solved by a person, through noVNC, never by the server** | Ticking the box automatically would be circumventing a protection. The server stops and returns a noVNC link for the agent to pass on. |
-| **Two-step order with a confirmation token, pay-at-pickup only** (planned) | An order commits the person. `prepare_order` returns a summary, `place_order` requires the token it produced. No payment data ever goes through the server. |
+| **Two-step order with a confirmation token, pay-at-pickup only** | An order commits the person. `prepare_order` returns a summary, `place_order` requires the token it produced. No payment data ever goes through the server. |
 | **The server's own access token** (`Authorization: Bearer`) | The server does not rely on whatever sits in front of it for protection. |
 | **Store fixed by configuration** (`STORE_ID`) | Prices depend on the store, and switching stores can change or empty the cart. Cross-store comparison is out of scope. |
 
@@ -111,8 +111,9 @@ Names and parameters of planned tools are indicative. Results are compact JSON, 
 | `create_list` / `delete_list` | ✅ | `GET Wishlist-CreateMyWishlistWeb` (`listName`), `POST Wishlist-EditListV2` (`action=remove`) | `delete_list` refused without `confirm: true` |
 | `add_to_list` / `remove_from_list` | ✅ | `POST Wishlist-AddToLists` / `Wishlist-RemoveFromLists` (`listIds`, `listInfo={"items":[{codeUC, pdtName, quantity}]}`) | list product count before and after |
 | `book_slot` | ✅ | `POST Checkout-SetShipping` (`dwfrm_shipping_*` fields, dates as `YYYYMMDD HH:MM:SS`) | slot must be one `get_slots` offers; done only if the header (`Home-IncludeNavigationSlotTimeInfo`) then shows that slot |
-| `prepare_order` | planned | checkout up to the summary | returns items, unavailable items, total, slot, payment mode and a token valid 10 minutes |
-| `place_order` | planned | final validation | off by default (`ALLOW_PLACE_ORDER=false`); refused if the cart or slot changed since `prepare_order`, or if payment is not at pickup |
+| `prepare_order` | ✅ | cart, booked slot, `/paiement` (the checkout page) | refused without a slot, below the minimum order or without payment at pickup; returns lines, estimated total, slot and a token valid 10 minutes |
+| `place_order` | ✅ | `POST Checkout-Submit`: the checkout's `paymentForm` with `selectedPaymentMethodID=OFFLINE_PAY` and the terms box, submitted as the page does | off by default (`ALLOW_PLACE_ORDER=false`); `confirm: true`; token single use; refused if the cart lines, the total or the slot changed since `prepare_order`; done only if a new order shows in the order list |
+| `cancel_order` | ✅ | `POST Order-Cancel?orderId=` (the form of the order page, `csrf_token` only) | `confirm: true`; done only if the order page then says "Annulée" |
 
 Writes call the site's own controllers as its scripts do (`src/coursesu/form.ts`): form fields,
 `format=ajax` and the page's `csrf_token`. Controller names come from the `Urls` map every page
@@ -121,7 +122,7 @@ embeds; the request formats were read in the site's public scripts.
 Every write returns an **execution report**: what was done, what was not and why (out of stock,
 capped quantity, substituted product). Without it, the real state and the assumed state drift
 apart silently. Write tool descriptions explicitly ask the agent to get the person's approval
-before `place_order` and `delete_list`.
+before `place_order`, `cancel_order` and `delete_list`.
 
 ## Site notes
 
@@ -142,6 +143,10 @@ before `place_order` and `delete_list`.
 - Till receipts are PDFs printed on a fixed-pitch grid: `text-grid.ts` rebuilds the grid from the
   PDF text layer (pdfjs), `receipt.ts` reads it and rejects any receipt whose totals do not add
   up.
+- Checkout is one page, `/paiement`, in three steps: pickup mode and slot (`Checkout-SetShipping`),
+  phone numbers, payment. Its `paymentForm` posts to `Checkout-Submit`; with `OFFLINE_PAY` it
+  leads to `/confirmation-de-commande`, and the cart is emptied. An order not collected yet shows
+  in its own banner on the orders page, and its page carries the cancel form.
 - Login goes through ForgeRock at `moncompte.magasins-u.com` (OIDC with PKCE), behind Cloudflare
   Turnstile.
 
@@ -171,13 +176,13 @@ before `place_order` and `delete_list`.
 2. **Read** ✅: product page, promotions, cart, lists, orders, slots, receipts (PDF parser),
    loyalty.
 3. **Write** ✅: cart, lists, slot booking.
-4. **Order**: `prepare_order`, then `place_order` on a real order with a person watching.
+4. **Order** ✅: `prepare_order`, `place_order` and `cancel_order`, tried on a real order (placed,
+   then cancelled) with a person watching.
 
 ## Open points
 
 - Challenge frequency with Chrome vs Chromium, and whether sessions have a maximum lifetime
   beyond 5.5 hours.
-- Checkout steps after the slot choice, up to pay-at-pickup validation.
 - Fallback if web sessions prove too short: the mobile app may use longer-lived tokens
   (`isMobileApp` shows in the authorisation URLs). Only worth studying if the web session does
   not hold.
