@@ -28,6 +28,7 @@ import { addListToCart, getCart, setCartItems } from "./coursesu/cart.ts";
 import { getProduct, getPromotions, searchProducts } from "./coursesu/catalog.ts";
 import { getLoyalty, getReceipt, getReceipts } from "./coursesu/client-area.ts";
 import { bookSlot, getSlots } from "./coursesu/drive.ts";
+import { cancelOrder, placeOrder, prepareOrder } from "./coursesu/order.ts";
 import { log } from "./log.ts";
 
 const config = loadConfig();
@@ -392,6 +393,38 @@ const buildServer = (): McpServer => {
         { slotId: z.string().regex(/^\d+$/).describe("Slot id, from get_slots") },
         ({ slotId }) => bookSlot(site, slotId),
         WRITE,
+    );
+
+    tool(
+        "prepare_order",
+        "Prepare the order",
+        "Checks that the cart can be ordered (booked slot, minimum amount, payment at pickup offered) and returns the summary to show the user: lines, estimated total, slot, payment at pickup. Returns a token valid 10 minutes for place_order. Orders nothing.",
+        {},
+        () => prepareOrder(site),
+    );
+
+    tool(
+        "place_order",
+        "Place the order",
+        "Places the drive order prepared by prepare_order, paid at pickup. Call it only after showing the user the prepare_order summary and getting an explicit yes. Refused if the cart, its total or the slot changed since, or if the server does not allow orders. Returns the new order as the order list shows it.",
+        {
+            token: z.string().uuid().describe("Token from prepare_order"),
+            confirm: z.literal(true).describe("true once the user confirmed this order"),
+        },
+        ({ token }) => placeOrder(site, token, config.allowPlaceOrder),
+        WRITE,
+    );
+
+    tool(
+        "cancel_order",
+        "Cancel an order",
+        "Cancels an order not yet collected, when the site allows it online. Ask the user for an explicit confirmation naming the order first, then call with confirm: true. Returns the order status afterwards.",
+        {
+            orderId: z.string().regex(/^\d+$/).describe("Order id, from get_orders"),
+            confirm: z.literal(true).describe("true once the user confirmed this cancellation"),
+        },
+        ({ orderId }) => cancelOrder(site, orderId),
+        DESTRUCTIVE,
     );
 
     return server;
