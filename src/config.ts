@@ -24,6 +24,8 @@ export type Config = {
     pageTimeoutMs: number;
     vncHost: string;
     vncPort: number;
+    /** Whether place_order may submit an order. Off unless set to "true". */
+    allowPlaceOrder: boolean;
 };
 
 /** Longest allowed gap between two keep-alive visits, in minutes. */
@@ -72,6 +74,11 @@ export const loadConfig = (): Config => {
         throw new Error(`BROWSER_CHANNEL is invalid: "${channel}" (chromium or chrome)`);
     }
 
+    const allowPlaceOrder = raw("ALLOW_PLACE_ORDER") ?? "false";
+    if (allowPlaceOrder !== "true" && allowPlaceOrder !== "false") {
+        throw new Error(`ALLOW_PLACE_ORDER is invalid: "${allowPlaceOrder}" (true or false)`);
+    }
+
     const nightHours = range("NIGHT_HOURS", "23-07");
     if (nightHours[0] > 23 || nightHours[1] > 23)
         throw new Error("NIGHT_HOURS: hours from 0 to 23");
@@ -102,5 +109,6 @@ export const loadConfig = (): Config => {
         pageTimeoutMs: integer("PAGE_TIMEOUT_MS", 30_000),
         vncHost: raw("VNC_HOST") ?? "<docker-host-ip>",
         vncPort: integer("VNC_PORT", 6080),
+        allowPlaceOrder: allowPlaceOrder === "true",
     };
 };
