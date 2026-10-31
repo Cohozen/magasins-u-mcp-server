@@ -94,6 +94,7 @@ Names and parameters of planned tools are indicative. Results are compact JSON, 
 | `search_products` | ✅ | `/recherche?q=` (tile tracking JSON + visible text) | id, EAN, name, brand, price, unit price, offer, promotion, pack size, washes |
 | `get_product` | ✅ | `Product-Show?pid=` (tile JSON + product sheet sections) | tile fields, Nutri-Score, ingredients, nutrition and other sections |
 | `get_promotions` | ✅ | `/c/promotions?promos=cardu-promo&start=&sz=` | promoted tiles with offer and end date, 20 per page |
+| `get_catalogues` / `get_catalogue` | ✅ | magasins-u.com `/promotions/tous-les-catalogues.m<store>`, then `/promotions/tous-les-catalogues/<id>.m<store>` | catalogues with their dates and whether they are upcoming; then a catalogue's products (offer, prices as printed), 20 per page, optionally filtered |
 | `get_cart` | ✅ | `/panier` (cart rows: tile JSON, `Quantity` input, visible amounts), `Home-IncludeNavigationSlotTimeInfo` | lines with quantity and discounted amount, estimated total, savings, minimum order, booked slot |
 | `get_lists` / `get_list` | ✅ | `/mon-compte/mes-listes`, `…?listID=&start=&sz=` | lists, then a list's products (paginated) |
 | `get_recent_purchases` | ✅ | `/mon-compte/mes-listes?isPref=true&start=&sz=` | recently bought products |
@@ -147,6 +148,10 @@ before `place_order`, `cancel_order` and `delete_list`.
   phone numbers, payment. Its `paymentForm` posts to `Checkout-Submit`; with `OFFLINE_PAY` it
   leads to `/confirmation-de-commande`, and the cart is emptied. An order not collected yet shows
   in its own banner on the orders page, and its page carries the cancel form.
+- magasins-u.com uses the same store id as coursesu.com, as a path suffix (`….m12345`). It
+  remembers one store in a cookie and redirects to it; `/landing/setMagasinContext.m<store><path>`
+  switches it. A catalogue page holds all its products in its HTML (`.u-tuile-produit`) and pages
+  them in the browser. Catalogue products carry no coursesu.com id.
 - Login goes through ForgeRock at `moncompte.magasins-u.com` (OIDC with PKCE), behind Cloudflare
   Turnstile.
 
