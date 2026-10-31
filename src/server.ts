@@ -271,9 +271,14 @@ const buildServer = (): McpServer => {
     tool(
         "get_receipts",
         "Till receipts",
-        "Lists the purchases made with the Carte U over the last months (in store or drive): transaction id, date, amount, store, and whether a till receipt can be read with get_receipt.",
-        {},
-        () => getReceipts(site),
+        "Lists the purchases made with the Carte U (in store or drive): transaction id, date, amount, store, and whether a till receipt can be read with get_receipt. Covers the last three months; with older: true, about two years (hasMore tells whether older ones exist).",
+        {
+            older: z
+                .boolean()
+                .optional()
+                .describe("true to also load older purchases, up to about two years"),
+        },
+        ({ older }) => getReceipts(site, older === true),
     );
 
     tool(

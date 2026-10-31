@@ -37,7 +37,7 @@ own internet connection.
 | `get_recent_purchases` | Products bought before ("Mes achats récents"). |
 | `get_orders` / `get_order` | Drive orders, then one order's lines with quantities and amounts. |
 | `get_slots` | Drive pickup slots of the coming days. Reading them books nothing. |
-| `get_receipts` / `get_receipt` | Carte U purchases of the last months, then one till receipt read line by line and checked for consistency. |
+| `get_receipts` / `get_receipt` | Carte U purchases of the last three months (about two years with `older: true`), then one till receipt read line by line and checked for consistency. |
 | `get_loyalty` | Carte U balance and digital offers (available, activated, used). |
 
 Tools that change the account:
