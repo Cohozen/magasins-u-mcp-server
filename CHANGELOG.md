@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.5.0](https://github.com/Cohozen/magasins-u-mcp-server/compare/v0.4.0...v0.5.0) (2026-10-31)
+
+
+### Features
+
+* Add get_catalogues and get_catalogue ([b4b22c5](https://github.com/Cohozen/magasins-u-mcp-server/commit/b4b22c5abc421b9ae9a20af9b4c1893f272e7b81))
+* Add rename_list ([4a561b1](https://github.com/Cohozen/magasins-u-mcp-server/commit/4a561b173ebcaa7848ddcc40a34e6d0fbc4ef5cd))
+* List unavailable and added products in get_order ([8c20086](https://github.com/Cohozen/magasins-u-mcp-server/commit/8c200863a74b4c3103ca6a32a59e05a936363574))
+* Load older receipts in get_receipts and get_receipt ([32c8241](https://github.com/Cohozen/magasins-u-mcp-server/commit/32c8241507b058c70e76009329fc4fb2d6faebd5))
+
 ## [0.4.0](https://github.com/Cohozen/magasins-u-mcp-server/compare/v0.3.1...v0.4.0) (2026-10-31)
 
 
