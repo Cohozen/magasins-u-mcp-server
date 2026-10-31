@@ -26,6 +26,7 @@ import {
 } from "./coursesu/account.ts";
 import { addListToCart, getCart, setCartItems } from "./coursesu/cart.ts";
 import { getProduct, getPromotions, searchProducts } from "./coursesu/catalog.ts";
+import { getCatalogue, getCatalogues } from "./coursesu/catalogues.ts";
 import { getLoyalty, getReceipt, getReceipts } from "./coursesu/client-area.ts";
 import { bookSlot, getSlots } from "./coursesu/drive.ts";
 import { cancelOrder, placeOrder, prepareOrder } from "./coursesu/order.ts";
@@ -207,6 +208,29 @@ const buildServer = (): McpServer => {
         "Lists the products on promotion in the selected store, 20 per page, with the offer and its end date. Several hundred products are on promotion: prefer search_products for a given need, and browse a page or two at most.",
         { page },
         ({ page }) => getPromotions(site, page),
+    );
+
+    tool(
+        "get_catalogues",
+        "Store catalogues",
+        "Lists the selected store's catalogues (prospectus) from magasins-u.com, current and upcoming, with their dates. An upcoming catalogue announces promotions not yet on coursesu.com: read it with get_catalogue.",
+        {},
+        () => getCatalogues(site),
+    );
+
+    tool(
+        "get_catalogue",
+        "Catalogue products",
+        "Returns the products of one store catalogue (from get_catalogues), 20 per page: name, pack size, offer, dates and prices as printed. Pass query to keep only the products whose name or description contains every word (case and accents ignored). Catalogue products are not linked to coursesu.com: use search_products to find one in the shop, and expect its promotion only within the catalogue's dates.",
+        {
+            catalogueId: z
+                .string()
+                .regex(/^[a-z0-9-]+$/)
+                .describe("Catalogue id, from get_catalogues"),
+            query: z.string().trim().min(2).max(60).optional().describe("Words to look for"),
+            page: z.number().int().min(1).max(20).default(1).describe("Page number, from 1"),
+        },
+        ({ catalogueId, query, page }) => getCatalogue(site, catalogueId, query, page),
     );
 
     tool(

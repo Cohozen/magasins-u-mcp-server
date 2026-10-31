@@ -32,6 +32,7 @@ own internet connection.
 | `search_products` | Searches the selected store: price, price per kilo or litre, promotion, pack size, price per wash for laundry detergent. |
 | `get_product` | A product sheet: Nutri-Score, ingredients, nutrition values and the other sections shown on the site. |
 | `get_promotions` | Products on promotion in the selected store, 20 per page. |
+| `get_catalogues` / `get_catalogue` | The store's catalogues (prospectus) from magasins-u.com, current and upcoming, then one catalogue's products, 20 per page, optionally filtered by words. |
 | `get_cart` | The cart: lines with quantity and amount after multi-buy discounts, estimated total, savings, booked pickup slot. |
 | `get_lists` / `get_list` | The account's shopping lists, then one list's products with current prices. |
 | `get_recent_purchases` | Products bought before ("Mes achats récents"). |
