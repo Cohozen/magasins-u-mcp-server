@@ -46,7 +46,7 @@ Tools that change the account:
 |---|---|
 | `set_cart_items` | Sets cart quantities (0 removes) and reports, product by product, what the cart holds afterwards. |
 | `add_list_to_cart` | Adds a shopping list's available products to the cart. |
-| `create_list` / `delete_list` | Creates a list; deletes one only with `confirm: true`. |
+| `create_list` / `rename_list` / `delete_list` | Creates or renames a list; deletes one only with `confirm: true`. |
 | `add_to_list` / `remove_from_list` | Adds products to a list or removes them. |
 | `book_slot` | Reserves a drive pickup slot. Nothing is ordered or paid. |
 | `prepare_order` | Checks the cart can be ordered (slot booked, minimum amount, payment at pickup) and returns the summary to show, with a token valid 10 minutes. Orders nothing. |
