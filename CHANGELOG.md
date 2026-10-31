@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.4.0](https://github.com/Cohozen/magasins-u-mcp-server/compare/v0.3.1...v0.4.0) (2026-10-31)
+
+
+### Features
+
+* Add prepare_order, place_order and cancel_order ([1e4c984](https://github.com/Cohozen/magasins-u-mcp-server/commit/1e4c9847b66de3d1d67031a7c37113afd728cb6b))
+
+
+### Bug Fixes
+
+* List orders not collected yet in get_orders ([cacc97d](https://github.com/Cohozen/magasins-u-mcp-server/commit/cacc97d0db379914cbfd53238f1988f9db1f664d))
+
 ## [0.3.1](https://github.com/Cohozen/magasins-u-mcp-server/compare/v0.3.0...v0.3.1) (2026-10-30)
 
 
