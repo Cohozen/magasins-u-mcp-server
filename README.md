@@ -35,7 +35,7 @@ own internet connection.
 | `get_cart` | The cart: lines with quantity and amount after multi-buy discounts, estimated total, savings, booked pickup slot. |
 | `get_lists` / `get_list` | The account's shopping lists, then one list's products with current prices. |
 | `get_recent_purchases` | Products bought before ("Mes achats récents"). |
-| `get_orders` / `get_order` | Drive orders, then one order's lines with quantities and amounts. |
+| `get_orders` / `get_order` | Drive orders, then one order's lines with quantities and amounts, and the products the store could not supply or added instead. |
 | `get_slots` | Drive pickup slots of the coming days. Reading them books nothing. |
 | `get_receipts` / `get_receipt` | Carte U purchases of the last months, then one till receipt read line by line and checked for consistency. |
 | `get_loyalty` | Carte U balance and digital offers (available, activated, used). |

@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { parseCurrentOrder, parseOrderCard, parseOrderLine, parseOrderPage } from "./account.ts";
+import {
+    parseCurrentOrder,
+    parseOrderCard,
+    parseOrderLine,
+    parseOrderPage,
+    substitutionLine,
+} from "./account.ts";
 
 // Texts shaped like the real pages, with invented order numbers, stores and amounts.
 const tile = (fields: Record<string, unknown>, text: string) => ({
@@ -109,5 +115,24 @@ describe("parseOrderPage", () => {
             someUnavailable: true,
         });
         expect(order.lines).toHaveLength(1);
+    });
+});
+
+describe("substitutionLine", () => {
+    it("reads the quantity ordered or prepared", () => {
+        expect(
+            substitutionLine({
+                pid: "1234567",
+                name: "\n  Escalope de dinde, 2 pièces  \n",
+                quantity: " Quantité commandée : 2 ",
+            }),
+        ).toEqual({ pid: "1234567", name: "Escalope de dinde, 2 pièces", quantity: 2 });
+        expect(
+            substitutionLine({ pid: null, name: "Produit", quantity: "Quantité préparée : 1" }),
+        ).toEqual({ pid: null, name: "Produit", quantity: 1 });
+    });
+
+    it("leaves an unreadable quantity empty", () => {
+        expect(substitutionLine({ pid: null, name: "Produit", quantity: "" }).quantity).toBeNull();
     });
 });
