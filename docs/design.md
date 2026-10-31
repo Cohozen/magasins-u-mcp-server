@@ -186,6 +186,9 @@ before `place_order`, `cancel_order` and `delete_list`.
 
 ## Open points
 
+- Modifying an order not collected yet: the "Modifier" button opens `Order-ModifyOrderPopin`,
+  whose next step only shows on a real order in progress. Studying it means placing a real order,
+  so it waits for a need.
 - Challenge frequency with Chrome vs Chromium, and whether sessions have a maximum lifetime
   beyond 5.5 hours.
 - Fallback if web sessions prove too short: the mobile app may use longer-lived tokens
