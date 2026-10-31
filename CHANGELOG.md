@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.1](https://github.com/Cohozen/magasins-u-mcp-server/compare/v0.5.0...v0.5.1) (2026-10-31)
+
+
+### Bug Fixes
+
+* Declare all four annotation hints on every tool ([72395ce](https://github.com/Cohozen/magasins-u-mcp-server/commit/72395ce150f7ece136ca56c8bce189abf13fd60d))
+
 ## [0.5.0](https://github.com/Cohozen/magasins-u-mcp-server/compare/v0.4.0...v0.5.0) (2026-10-31)
 
 
