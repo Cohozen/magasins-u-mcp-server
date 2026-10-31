@@ -256,7 +256,7 @@ const buildServer = (): McpServer => {
     tool(
         "get_order",
         "Drive order detail",
-        "Returns one drive order: status, total, payment, and every line with the quantity ordered and what it cost.",
+        "Returns one drive order: status, total, payment, and every line with the quantity ordered and what it cost. When the store could not supply some products, also lists them (unavailable) and the products the picker added instead or as asked (added), which can be refused at pickup.",
         { orderId: z.string().regex(/^\d+$/).describe("Order id, from get_orders") },
         ({ orderId }) => getOrder(site, orderId),
     );

@@ -254,9 +254,30 @@ export type Order = OrderSummary & {
     payment: string | null;
     /** "OFFERTS" or an amount, as displayed. */
     preparationFee: string | null;
-    /** The store could not supply some products; the site lists them on another page. */
+    /** The store could not supply some products, listed in `unavailable`. */
     someUnavailable: boolean;
     lines: OrderLine[];
+    /** Ordered products the store could not supply. */
+    unavailable: SubstitutionLine[];
+    /** Products the picker added, as replacements or as asked; they can be refused at pickup. */
+    added: SubstitutionLine[];
+};
+
+/** A product of the "Produits indisponibles" page. Quantity ordered, or prepared for an added one. */
+export type SubstitutionLine = { pid: string | null; name: string; quantity: number | null };
+
+/** "Quantité commandée : 2" or "Quantité préparée : 1" → 2 or 1. */
+export const substitutionLine = (raw: {
+    pid: string | null;
+    name: string;
+    quantity: string;
+}): SubstitutionLine => {
+    const quantity = Number(/:\s*(\d+)/.exec(raw.quantity)?.[1]);
+    return {
+        pid: raw.pid,
+        name: squash(raw.name),
+        quantity: Number.isFinite(quantity) && quantity > 0 ? quantity : null,
+    };
 };
 
 export const parseOrderLine = (raw: RawTile): OrderLine | null => {
@@ -320,6 +341,33 @@ export const parseOrderPage = (
         preparationFee: after(/^Frais de préparation$/),
         someUnavailable: /certains produits étaient indisponibles/i.test(squash(text)),
         lines: tiles.flatMap((tile) => parseOrderLine(tile) ?? []),
+        unavailable: [],
+        added: [],
+    };
+};
+
+/** The "Produits indisponibles" page of an order: what was missing, and what was added instead. */
+const getSubstitutions = async (site: Site, orderId: string) => {
+    const page = await site.goto(
+        `${ORIGIN}/mon-compte/mes-commandes-encours/detail/info?orderId=${encodeURIComponent(orderId)}`,
+    );
+    const read = (block: string) =>
+        page.evaluate(
+            (scope) =>
+                [...document.querySelectorAll(`.substitution-block.${scope} .su-product-tile`)].map(
+                    (tile) => ({
+                        pid:
+                            tile.querySelector("[data-info-id]")?.getAttribute("data-info-id") ??
+                            null,
+                        name: tile.querySelector(".product-name-link")?.textContent ?? "",
+                        quantity: tile.querySelector(".product-quantity-label")?.textContent ?? "",
+                    }),
+                ),
+            block,
+        );
+    return {
+        unavailable: (await read("unavailable-products")).map(substitutionLine),
+        added: (await read("added-products")).map(substitutionLine),
     };
 };
 
@@ -333,5 +381,6 @@ export const getOrder = async (site: Site, orderId: string): Promise<Order> => {
         text: document.body.innerText,
         step: document.querySelector(".su-order-current-state-active")?.textContent ?? null,
     }));
-    return parseOrderPage(orderId, text, tiles, step);
+    const order = parseOrderPage(orderId, text, tiles, step);
+    return order.someUnavailable ? { ...order, ...(await getSubstitutions(site, orderId)) } : order;
 };
