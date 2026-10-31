@@ -49,8 +49,11 @@ Tools that change the account:
 | `create_list` / `delete_list` | Creates a list; deletes one only with `confirm: true`. |
 | `add_to_list` / `remove_from_list` | Adds products to a list or removes them. |
 | `book_slot` | Reserves a drive pickup slot. Nothing is ordered or paid. |
+| `prepare_order` | Checks the cart can be ordered (slot booked, minimum amount, payment at pickup) and returns the summary to show, with a token valid 10 minutes. Orders nothing. |
+| `place_order` | Places the prepared order, paid at pickup, with `confirm: true`. Refused if the cart, its total or the slot changed since `prepare_order`. Off unless `ALLOW_PLACE_ORDER=true`. |
+| `cancel_order` | Cancels an order not yet collected, when the site allows it online, with `confirm: true`. |
 
-Placing an order is not supported yet.
+The server never pays online: orders are paid at pickup.
 
 Product data is returned in French, as shown on the site.
 
@@ -129,6 +132,7 @@ Every variable is described in [.env.example](.env.example). The main ones:
 | `BROWSER_CHANNEL` | `chrome` (Compose) | `chrome` or `chromium` |
 | `DELAY_MS` | `3000-8000` | Random pause between two site requests |
 | `DAILY_REQUEST_CAP` | `300` | Daily cap on site requests |
+| `ALLOW_PLACE_ORDER` | `false` | Lets `place_order` submit orders |
 | `KEEPALIVE_DAY_MIN` / `KEEPALIVE_NIGHT_MIN` | `18-26` / `18-26` | Keep-alive interval, in minutes (30 at most: the site drops the session after 30 to 45 idle minutes) |
 
 ## Data and security
