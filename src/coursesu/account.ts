@@ -84,6 +84,21 @@ export const deleteList = async (site: Site, listId: string) => {
     return { done: !after.some((list) => list.id === listId), siteError, lists: after };
 };
 
+/** Renames a list, as the list page does when its title is edited. */
+export const renameList = async (site: Site, listId: string, name: string) => {
+    const { siteError, after } = await listWrite(site, (token, before) => {
+        requireList(before, listId);
+        return callController(site, "Wishlist-EditListV2", token, {
+            listId,
+            isPref: "false",
+            listInfo: JSON.stringify({ items: [], listName: name }),
+            action: "edit",
+        });
+    });
+    const list = after.find((candidate) => candidate.id === listId) ?? null;
+    return { done: list?.name === name, list, siteError };
+};
+
 const listInfo = (products: { pid: string; name: string }[]): string =>
     JSON.stringify({
         items: products.map(({ pid, name }) => ({

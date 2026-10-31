@@ -23,6 +23,7 @@ import {
     getOrder,
     getOrders,
     getRecentPurchases,
+    renameList,
 } from "./coursesu/account.ts";
 import { addListToCart, getCart, setCartItems } from "./coursesu/cart.ts";
 import { getProduct, getPromotions, searchProducts } from "./coursesu/catalog.ts";
@@ -353,6 +354,24 @@ const buildServer = (): McpServer => {
         "Creates an empty shopping list on the account. Returns the new list and its id.",
         { name: z.string().trim().min(1).max(60).describe("List name") },
         ({ name }) => createList(site, name),
+        WRITE,
+    );
+
+    tool(
+        "rename_list",
+        "Rename a shopping list",
+        "Renames a shopping list. Returns the list as the site shows it afterwards.",
+        {
+            listId,
+            name: z
+                .string()
+                .trim()
+                .min(1)
+                .max(60)
+                .regex(/^[^<|>]+$/, "the site refuses <, | and >")
+                .describe("New list name"),
+        },
+        ({ listId, name }) => renameList(site, listId, name),
         WRITE,
     );
 

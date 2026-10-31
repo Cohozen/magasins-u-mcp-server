@@ -108,7 +108,7 @@ Names and parameters of planned tools are indicative. Results are compact JSON, 
 |---|---|---|---|
 | `set_cart_items` | ✅ | `POST Cart-AddProduct` (`update=true` sets the quantity of a line in the cart, `Quantity=0` removes it; `update=false` adds) | absolute quantities, 24 at most per line; report built from the cart page afterwards |
 | `add_list_to_cart` | ✅ | `POST Wishlist-AddToCartWeb` (`listID`) | report of the cart lines that changed |
-| `create_list` / `delete_list` | ✅ | `GET Wishlist-CreateMyWishlistWeb` (`listName`), `POST Wishlist-EditListV2` (`action=remove`) | `delete_list` refused without `confirm: true` |
+| `create_list` / `rename_list` / `delete_list` | ✅ | `GET Wishlist-CreateMyWishlistWeb` (`listName`), `POST Wishlist-EditListV2` (`action=edit` with `listInfo.listName`, `action=remove`) | `delete_list` refused without `confirm: true` |
 | `add_to_list` / `remove_from_list` | ✅ | `POST Wishlist-AddToLists` / `Wishlist-RemoveFromLists` (`listIds`, `listInfo={"items":[{codeUC, pdtName, quantity}]}`) | list product count before and after |
 | `book_slot` | ✅ | `POST Checkout-SetShipping` (`dwfrm_shipping_*` fields, dates as `YYYYMMDD HH:MM:SS`) | slot must be one `get_slots` offers; done only if the header (`Home-IncludeNavigationSlotTimeInfo`) then shows that slot |
 | `prepare_order` | ✅ | cart, booked slot, `/paiement` (the checkout page) | refused without a slot, below the minimum order or without payment at pickup; returns lines, estimated total, slot and a token valid 10 minutes |
