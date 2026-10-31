@@ -145,6 +145,8 @@ export type OrderSummary = {
     status: string | null;
     store: string | null;
     total: number | null;
+    /** For an order not collected yet: "05/11/2026 de 10h00 à 11h00". */
+    pickup: string | null;
 };
 
 const DATE = /(\d{2})\/(\d{2})\/(\d{4})/;
@@ -172,19 +174,58 @@ export const parseOrderCard = (id: string, text: string): OrderSummary => {
             /^Nº\s*\d+\s*-\s*(.+)$/.exec(rows.find((row) => row.startsWith("Nº")) ?? "")?.[1] ??
             null,
         total: euros(/(\d+,\d{2})\s*€/.exec(text)?.[1]),
+        pickup: null,
+    };
+};
+
+const PICKUP = "Retrait prévu le ";
+/** "Retrait prévu le 05/11/2026 de 10h00 à 11h00" → "05/11/2026 de 10h00 à 11h00". */
+const pickupOf = (rows: string[]): string | null =>
+    rows.find((row) => row.startsWith(PICKUP))?.slice(PICKUP.length) ?? null;
+
+/**
+ * The banner of an order not collected yet: "Votre commande Drive en cours Nº …", then the
+ * pickup slot and the store. Its status is the highlighted step, read apart from the text.
+ */
+export const parseCurrentOrder = (
+    id: string,
+    text: string,
+    status: string | null,
+): OrderSummary => {
+    const rows = lines(text);
+    const pickupAt = rows.findIndex((row) => row.startsWith(PICKUP));
+    return {
+        id,
+        date: null,
+        mode: /^Votre commande (.+?) en cours/.exec(rows[0] ?? "")?.[1] ?? null,
+        status: status === null ? null : squash(status),
+        store: pickupAt === -1 ? null : (rows[pickupAt + 1] ?? null),
+        total: null,
+        pickup: pickupOf(rows),
     };
 };
 
 export const getOrders = async (site: Site): Promise<OrderSummary[]> => {
     const page = await site.goto(`${ORIGIN}/mon-compte/mes-commandes`);
-    const cards = await page.evaluate(() =>
-        [...document.querySelectorAll(".su-order-block[data-order-id]")].map((card) => ({
+    const { current, past } = await page.evaluate(() => ({
+        current: [...document.querySelectorAll(".su-order-current")].map((block) => ({
+            id: block.querySelector("[data-order-id]")?.getAttribute("data-order-id") ?? "",
+            // biome-ignore lint/performance/useDomNodeTextContent: innerText keeps one line per displayed block
+            text: (block as HTMLElement).innerText,
+            status: block.querySelector(".su-order-current-state-active")?.textContent ?? null,
+        })),
+        past: [...document.querySelectorAll(".su-order-block[data-order-id]")].map((card) => ({
             id: card.getAttribute("data-order-id") ?? "",
             // biome-ignore lint/performance/useDomNodeTextContent: innerText keeps one line per displayed block
             text: (card as HTMLElement).innerText,
         })),
-    );
-    return cards.map((card) => parseOrderCard(card.id, card.text));
+    }));
+    return [
+        ...current
+            .filter((order) => order.id !== "")
+            .map((order) => parseCurrentOrder(order.id, order.text, order.status)),
+        ...past.map((card) => parseOrderCard(card.id, card.text)),
+    ];
 };
 
 export type OrderLine = Product & {
@@ -217,9 +258,19 @@ export const parseOrderLine = (raw: RawTile): OrderLine | null => {
     };
 };
 
-/** Header of an order page: "Votre commande Drive du 23/10/2026 (Nº 123)", status, totals. */
-export const parseOrderPage = (id: string, text: string, tiles: RawTile[]): Order => {
+/**
+ * Header of an order page: "Votre commande Drive du 23/10/2026 (Nº 123)", status, totals. Before
+ * pickup the page lists every step ("Validée", "En préparation", "Prête") then the slot and the
+ * store; `currentStep` is the highlighted one.
+ */
+export const parseOrderPage = (
+    id: string,
+    text: string,
+    tiles: RawTile[],
+    currentStep: string | null = null,
+): Order => {
     const rows = lines(text);
+    const pickupAt = rows.findIndex((row) => row.startsWith(PICKUP));
     const titleAt = rows.findIndex((row) => /^Votre commande .* du /.test(row));
     const title = rows[titleAt] ?? "";
     const status = (rows[titleAt + 1] ?? "").replace(/\s*Télécharger le récapitulatif$/, "");
@@ -232,9 +283,23 @@ export const parseOrderPage = (id: string, text: string, tiles: RawTile[]): Orde
         id,
         date: isoDate(title),
         mode: /^Votre commande (.+?) du /.exec(title)?.[1] ?? null,
-        status: titleAt === -1 || status === "" ? null : status,
-        store: titleAt === -1 ? null : (rows[titleAt + 2] ?? null),
-        total: euros(/(\d+,\d{2})/.exec(after(/^Reste à payer$/) ?? "")?.[1]),
+        status:
+            currentStep !== null
+                ? squash(currentStep)
+                : titleAt === -1 || status === ""
+                  ? null
+                  : status,
+        store:
+            pickupAt !== -1
+                ? (rows[pickupAt + 1] ?? null)
+                : titleAt === -1
+                  ? null
+                  : (rows[titleAt + 2] ?? null),
+        // "Reste à payer" once collected, "Total estimé" before.
+        total: euros(
+            /(\d+,\d{2})/.exec(after(/^Reste à payer$/) ?? after(/^Total estimé/) ?? "")?.[1],
+        ),
+        pickup: pickupOf(rows),
         itemCount: Number.isFinite(itemCount) ? itemCount : null,
         payment: rows.find((row) => /^Paiement /.test(row)) ?? null,
         preparationFee: after(/^Frais de préparation$/),
@@ -248,7 +313,10 @@ export const getOrder = async (site: Site, orderId: string): Promise<Order> => {
         `${ORIGIN}/mon-compte/mes-commandes-encours/detail?orderId=${encodeURIComponent(orderId)}`,
     );
     const tiles = await readTiles(page, "[data-order-products] [data-tc-product-tile]", 500);
-    // biome-ignore lint/performance/useDomNodeTextContent: innerText keeps one line per displayed block
-    const text = await page.evaluate(() => document.body.innerText);
-    return parseOrderPage(orderId, text, tiles);
+    const { text, step } = await page.evaluate(() => ({
+        // biome-ignore lint/performance/useDomNodeTextContent: innerText keeps one line per displayed block
+        text: document.body.innerText,
+        step: document.querySelector(".su-order-current-state-active")?.textContent ?? null,
+    }));
+    return parseOrderPage(orderId, text, tiles, step);
 };

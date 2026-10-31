@@ -97,7 +97,7 @@ Names and parameters of planned tools are indicative. Results are compact JSON, 
 | `get_cart` | ✅ | `/panier` (cart rows: tile JSON, `Quantity` input, visible amounts), `Home-IncludeNavigationSlotTimeInfo` | lines with quantity and discounted amount, estimated total, savings, minimum order, booked slot |
 | `get_lists` / `get_list` | ✅ | `/mon-compte/mes-listes`, `…?listID=&start=&sz=` | lists, then a list's products (paginated) |
 | `get_recent_purchases` | ✅ | `/mon-compte/mes-listes?isPref=true&start=&sz=` | recently bought products |
-| `get_orders` / `get_order` | ✅ | `/mon-compte/mes-commandes`, `/mon-compte/mes-commandes-encours/detail?orderId=` | orders, then an order's lines with quantity and amount |
+| `get_orders` / `get_order` | ✅ | `/mon-compte/mes-commandes` (`.su-order-current` for orders not collected yet, `.su-order-block` for the others), `/mon-compte/mes-commandes-encours/detail?orderId=` | orders with their status and, before collection, the pickup slot; then an order's lines with quantity and amount |
 | `get_slots` | ✅ | `DeliverySlot-GetDeliverySlotsWeb` (csrf token from the cart page) | pickup slots: id, start, end, orders booked |
 | `get_receipts` / `get_receipt` | ✅ | account API `POST /moncompte/etickets`, `GET /moncompte/etickets/{id}/{n}/download` (PDF) | transactions, then a parsed till receipt (lines, discounts, totals, consistency checks) |
 | `get_loyalty` | ✅ | account area page + account API `GET /mesoffres/v2` | Carte U balance and digital offers |

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseOrderCard, parseOrderLine, parseOrderPage } from "./account.ts";
+import { parseCurrentOrder, parseOrderCard, parseOrderLine, parseOrderPage } from "./account.ts";
 
 // Texts shaped like the real pages, with invented order numbers, stores and amounts.
 const tile = (fields: Record<string, unknown>, text: string) => ({
@@ -19,6 +19,23 @@ describe("parseOrderCard", () => {
             status: "Retirée",
             store: "Super U Exemple",
             total: 98.4,
+            pickup: null,
+        });
+    });
+});
+
+describe("parseCurrentOrder", () => {
+    it("reads mode, pickup slot and store of an order not collected yet", () => {
+        const text =
+            "Votre commande Drive en cours Nº 33334444\nValidée\nEn préparation\nPrête\nRetrait prévu le 05/02/2026 de 10h00 à 11h00\nSuper U Exemple\n1 rue de l'Exemple\nVoir sur la carte\nModifier\nVoir le détail";
+        expect(parseCurrentOrder("33334444", text, " Validée ")).toEqual({
+            id: "33334444",
+            date: null,
+            mode: "Drive",
+            status: "Validée",
+            store: "Super U Exemple",
+            total: null,
+            pickup: "05/02/2026 de 10h00 à 11h00",
         });
     });
 });
