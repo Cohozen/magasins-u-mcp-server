@@ -72,6 +72,30 @@ const failure = (error: unknown): CallToolResult => {
     };
 };
 
+/**
+ * Tool hints, all four declared on every tool: some directories reject a tool missing one. Every
+ * tool reaches the live site, hence openWorldHint. A repeated call with the same arguments has no
+ * further effect for reads and for DESTRUCTIVE tools (delete, remove, cancel).
+ */
+const READ: ToolAnnotations = {
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: true,
+};
+const WRITE: ToolAnnotations = {
+    readOnlyHint: false,
+    destructiveHint: false,
+    idempotentHint: false,
+    openWorldHint: true,
+};
+const DESTRUCTIVE: ToolAnnotations = {
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: true,
+    openWorldHint: true,
+};
+
 const buildServer = (): McpServer => {
     const server = new McpServer({ name: "magasins-u", version }, { instructions: INSTRUCTIONS });
 
@@ -81,7 +105,7 @@ const buildServer = (): McpServer => {
             title: "Courses U session status",
             description:
                 "Tells whether the server is signed in to the Courses U account, which store is selected and how many site requests were made today. When a human action is needed (login, Cloudflare check), returns the link to pass on to the person.",
-            annotations: { readOnlyHint: true, openWorldHint: true },
+            annotations: READ,
         },
         async () => {
             const blocking = site.unavailableMessage();
@@ -126,7 +150,7 @@ const buildServer = (): McpServer => {
         description: string,
         inputSchema: Shape,
         task: (args: z.infer<z.ZodObject<Shape>>) => Promise<unknown>,
-        annotations: ToolAnnotations = { readOnlyHint: true, openWorldHint: true },
+        annotations: ToolAnnotations = READ,
     ): void => {
         const callback = async (args: unknown): Promise<CallToolResult> => {
             try {
@@ -142,16 +166,6 @@ const buildServer = (): McpServer => {
             { title, description, inputSchema, annotations },
             callback as never,
         );
-    };
-    const WRITE: ToolAnnotations = {
-        readOnlyHint: false,
-        destructiveHint: false,
-        openWorldHint: true,
-    };
-    const DESTRUCTIVE: ToolAnnotations = {
-        readOnlyHint: false,
-        destructiveHint: true,
-        openWorldHint: true,
     };
 
     const page = z
@@ -365,7 +379,7 @@ const buildServer = (): McpServer => {
                 .max(30),
         },
         ({ items }) => setCartItems(site, items),
-        WRITE,
+        { ...WRITE, idempotentHint: true },
     );
 
     tool(
@@ -440,7 +454,7 @@ const buildServer = (): McpServer => {
         "Reserves a drive pickup slot (from get_slots) for the current cart. It orders and pays nothing; the reservation lasts a limited time and promotions may depend on the pickup date. Book only the slot the user chose.",
         { slotId: z.string().regex(/^\d+$/).describe("Slot id, from get_slots") },
         ({ slotId }) => bookSlot(site, slotId),
-        WRITE,
+        { ...WRITE, idempotentHint: true },
     );
 
     tool(
