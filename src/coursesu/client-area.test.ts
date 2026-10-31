@@ -54,6 +54,27 @@ describe("parseTransactions", () => {
     });
 });
 
+describe("parseTransactions with older answers", () => {
+    it("merges the answers once each, and takes hasMore from the last one", () => {
+        const recent = JSON.stringify({
+            hasMoreTransactions: true,
+            monthlyTransactions: {
+                "2026-02": [{ transactionId: "aaaa-1", date: "2026-02-03T10:15:00" }],
+            },
+        });
+        const older = JSON.stringify({
+            hasMoreTransactions: false,
+            monthlyTransactions: {
+                "2026-02": [{ transactionId: "aaaa-1", date: "2026-02-03T10:15:00" }],
+                "2025-06": [{ transactionId: "cccc-3", date: "2025-06-10T09:00:00" }],
+            },
+        });
+        const { hasMore, transactions } = parseTransactions(recent, older);
+        expect(hasMore).toBe(false);
+        expect(transactions.map((transaction) => transaction.id)).toEqual(["aaaa-1", "cccc-3"]);
+    });
+});
+
 describe("parseOffers", () => {
     it("keeps what matters and the earnings of used offers", () => {
         const json = JSON.stringify({

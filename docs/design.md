@@ -99,7 +99,7 @@ Names and parameters of planned tools are indicative. Results are compact JSON, 
 | `get_recent_purchases` | ✅ | `/mon-compte/mes-listes?isPref=true&start=&sz=` | recently bought products |
 | `get_orders` / `get_order` | ✅ | `/mon-compte/mes-commandes` (`.su-order-current` for orders not collected yet, `.su-order-block` for the others), `/mon-compte/mes-commandes-encours/detail?orderId=`, then `/detail/info?orderId=` when some products were missing | orders with their status and, before collection, the pickup slot; then an order's lines with quantity and amount, the unavailable products and those the picker added |
 | `get_slots` | ✅ | `DeliverySlot-GetDeliverySlotsWeb` (csrf token from the cart page) | pickup slots: id, start, end, orders booked |
-| `get_receipts` / `get_receipt` | ✅ | account API `POST /moncompte/etickets`, `GET /moncompte/etickets/{id}/{n}/download` (PDF) | transactions, then a parsed till receipt (lines, discounts, totals, consistency checks) |
+| `get_receipts` / `get_receipt` | ✅ | account API `POST /moncompte/etickets` (the page's "Voir plus" button loads about two years more), `GET /moncompte/etickets/{id}/{n}/download` (PDF) | transactions, then a parsed till receipt (lines, discounts, totals, consistency checks) |
 | `get_loyalty` | ✅ | account area page + account API `GET /mesoffres/v2` | Carte U balance and digital offers |
 
 ### Write

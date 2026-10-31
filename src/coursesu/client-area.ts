@@ -7,7 +7,7 @@
  * for one more call of the same API.
  */
 
-import type { Request } from "patchright";
+import type { Response } from "patchright";
 import { ORIGIN, type Site } from "../browser.ts";
 import { euros, squash } from "./catalog.ts";
 import { readPdfText } from "./pdf-text.ts";
@@ -39,16 +39,36 @@ export type Transaction = {
 const isReceipt = (document: { filename?: string }): boolean =>
     /ticket de caisse/i.test(document.filename ?? "");
 
-/** Answer of `POST /moncompte/etickets`: transactions grouped by month, newest first. */
+type TransactionAnswer = {
+    hasMoreTransactions?: boolean;
+    monthlyTransactions?: Record<string, RawTransaction[]>;
+};
+
+/** Every transaction of the answers, once each (a later answer may repeat the first months). */
+const rawTransactions = (answers: string[]): RawTransaction[] => {
+    const seen = new Set<string>();
+    return answers
+        .flatMap((json) =>
+            Object.values((JSON.parse(json) as TransactionAnswer).monthlyTransactions ?? {}).flat(),
+        )
+        .filter((raw) => {
+            if (raw.transactionId === undefined || seen.has(raw.transactionId)) return false;
+            seen.add(raw.transactionId);
+            return true;
+        });
+};
+
+const hasMore = (json: string): boolean =>
+    (JSON.parse(json) as TransactionAnswer).hasMoreTransactions === true;
+
+/**
+ * Answers of `POST /moncompte/etickets`: transactions grouped by month, newest first. The page
+ * asks for the last three months, then for older ones when "Voir plus" is clicked.
+ */
 export const parseTransactions = (
-    json: string,
+    ...answers: string[]
 ): { hasMore: boolean; transactions: Transaction[] } => {
-    const data = JSON.parse(json) as {
-        hasMoreTransactions?: boolean;
-        monthlyTransactions?: Record<string, RawTransaction[]>;
-    };
-    const transactions = Object.values(data.monthlyTransactions ?? {})
-        .flat()
+    const transactions = rawTransactions(answers)
         .flatMap((raw) =>
             raw.transactionId === undefined
                 ? []
@@ -64,36 +84,47 @@ export const parseTransactions = (
                   ],
         )
         .sort((a, b) => (b.date ?? "").localeCompare(a.date ?? ""));
-    return { hasMore: data.hasMoreTransactions === true, transactions };
+    return { hasMore: hasMore(answers.at(-1) ?? "{}"), transactions };
 };
 
-const isTransactionList = (request: Request): boolean =>
-    request.method() === "POST" && request.url() === `${API}/moncompte/etickets`;
+const isTransactionList = (answer: Response): boolean =>
+    answer.request().method() === "POST" && answer.url() === `${API}/moncompte/etickets`;
 
-/** Till receipts and card slips of the last months (the site shows three at first). */
-export const getReceipts = async (site: Site) => {
-    const { response } = await site.gotoAndWait(`${CLIENT_AREA}?ec-page=e-tickets`, (answer) =>
-        isTransactionList(answer.request()),
+/**
+ * Opens the receipts page and returns the answers its calls got: the last three months, then,
+ * when asked and when there are more, the older ones the "Voir plus" button loads (about two years).
+ */
+const loadTransactions = async (site: Site, older: boolean) => {
+    const { page, response } = await site.gotoAndWait(
+        `${CLIENT_AREA}?ec-page=e-tickets`,
+        isTransactionList,
     );
-    return parseTransactions(await response.text());
+    const answers = [await response.text()];
+    if (older) await addOlder(site, answers);
+    return { page, response, answers };
 };
+
+/** Clicks "Voir plus" when the last answer says there are more, and keeps the new answer. */
+const addOlder = async (site: Site, answers: string[]): Promise<void> => {
+    if (!hasMore(answers.at(-1) ?? "{}")) return;
+    const more = await site.clickAndWait("[data-ec-load-more-tickets]", isTransactionList);
+    answers.push(await more.text());
+};
+
+/** Till receipts and card slips of the last three months, or of about two years with `older`. */
+export const getReceipts = async (site: Site, older: boolean) =>
+    parseTransactions(...(await loadTransactions(site, older)).answers);
 
 export type ReceiptAnswer = { ok: true; receipt: Receipt } | { ok: false; reason: string };
 
 /** Downloads a till receipt's PDF from the account API and reads it. */
 export const getReceipt = async (site: Site, transactionId: string): Promise<ReceiptAnswer> => {
-    const { page, response } = await site.gotoAndWait(
-        `${CLIENT_AREA}?ec-page=e-tickets`,
-        (answer) => isTransactionList(answer.request()),
-    );
-    const data = JSON.parse(await response.text()) as {
-        monthlyTransactions?: Record<string, RawTransaction[]>;
-    };
-    const transaction = Object.values(data.monthlyTransactions ?? {})
-        .flat()
-        .find((raw) => raw.transactionId === transactionId);
+    const { page, response, answers } = await loadTransactions(site, false);
+    const find = () => rawTransactions(answers).find((raw) => raw.transactionId === transactionId);
+    if (find() === undefined) await addOlder(site, answers);
+    const transaction = find();
     if (transaction === undefined) {
-        return { ok: false, reason: "No such transaction in the last months (see get_receipts)." };
+        return { ok: false, reason: "No such transaction (see get_receipts)." };
     }
     const receipt = (transaction.etickets ?? []).find(isReceipt);
     if (receipt === undefined) {

@@ -215,6 +215,19 @@ export class Site {
         return { page, response: await waiting };
     }
 
+    /** Clicks an element of the current page after the pause, and waits for a call it triggers. */
+    async clickAndWait(
+        selector: string,
+        match: (response: Response) => boolean,
+    ): Promise<Response> {
+        const page = this.requirePage();
+        await this.pace();
+        const waiting = page.waitForResponse(match, { timeout: this.config.pageTimeoutMs });
+        waiting.catch(() => undefined);
+        await page.click(selector, { timeout: this.config.pageTimeoutMs });
+        return waiting;
+    }
+
     /** Calls a site route from the page, with its cookies, after the pause. */
     async fetchText(url: string, init?: { method?: string; body?: string }): Promise<string> {
         const page = this.requirePage();
